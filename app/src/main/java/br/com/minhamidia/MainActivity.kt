@@ -890,22 +890,27 @@ class MainActivity : ComponentActivity() {
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("▼", color = Color(0xFFFFD27A), fontSize = 25.sp, fontWeight = FontWeight.Black)
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(196.dp)) {
-                                            Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = rouletteWheelRotation.value }) {
-                                                val colors = listOf(Purple, Color(0xFF5D35A5), Color(0xFFDBA7FF), Color(0xFF39205F), Color(0xFF8B4CE0), Color(0xFF241638), Color(0xFFC58BFF), Color(0xFF7040B8), Color(0xFF4A267A), Color(0xFFD9B6FF), Color(0xFF321B50), Color(0xFF9560D8))
-                                                val slice = 360f / colors.size
-                                                colors.forEachIndexed { index, color ->
-                                                    drawArc(color = color, startAngle = index * slice, sweepAngle = slice - 1.5f, useCenter = true)
+                                        LazyRow(
+                                            modifier = Modifier.fillMaxWidth().height(190.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            contentPadding = PaddingValues(horizontal = 30.dp)
+                                        ) {
+                                            val carouselItems = if (rouletteMode == "LIST") options else rouletteCarouselItems
+                                            items(carouselItems.take(12), key = { "wheel-${it.type}-${it.id}" }) { poster ->
+                                                Column(
+                                                    Modifier.width(104.dp).graphicsLayer {
+                                                        rotationY = if (poster.id % 2 == 0) 13f else -13f
+                                                        cameraDistance = 12 * density
+                                                    },
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    AsyncImage(model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = poster.title, modifier = Modifier.fillMaxWidth().height(148.dp).background(Color(0xFF14263A), RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+                                                    Text(poster.title, color = Color(0xFFFFD27A), fontSize = 9.sp, maxLines = 1)
                                                 }
-                                                drawCircle(color = Color(0xFFFFD27A), radius = size.minDimension * .475f, style = Stroke(width = 4.dp.toPx()))
-                                                drawCircle(color = Night, radius = size.minDimension * .19f)
-                                                drawCircle(color = Color.White.copy(alpha = .9f), radius = size.minDimension * .19f, style = Stroke(width = 3.dp.toPx()))
-                                            }
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("CV", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Black)
-                                                Text("GIRAR", color = Purple, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold)
                                             }
                                         }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) { repeat(9) { Box(Modifier.size(7.dp).background(Color(0xFFFFD27A), RoundedCornerShape(50))) } }
                                     }
                                     Text(if (rouletteSpinning) "A sorte está sendo lançada..." else "Toque em GIRAR e deixe a roleta decidir!", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     if (rouletteError.isNotBlank()) Text(rouletteError, color = Color(0xFFFF8A8A), fontSize = 11.sp)
