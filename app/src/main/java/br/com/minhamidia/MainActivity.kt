@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
                             }
                             "Detalhes" -> {
                                 val selectedTitle = detailItem
-                                if (item != null) {
+                                if (selectedTitle != null) {
                                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                                         item {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
