@@ -1,6 +1,7 @@
 package br.com.minhamidia
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -246,6 +247,18 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val trailerQuery = "${selectedTitle.title} ${selectedTitle.year} trailer oficial"
+                                                    val youtubeUrl = "https://www.youtube.com/results?search_query=${Uri.encode(trailerQuery)}"
+                                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl)))
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF5A5F))
+                                            ) {
+                                                Text("▶  Assistir trailer no YouTube", fontWeight = FontWeight.Bold)
+                                            }
+                                            Spacer(Modifier.height(4.dp))
                                             Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                             (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
                                                 Button(onClick = {
