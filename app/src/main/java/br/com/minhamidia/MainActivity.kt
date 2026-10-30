@@ -561,46 +561,76 @@ class MainActivity : ComponentActivity() {
                                                     for (i in 0 until seasons.length()) {
                                                         val season = seasons.optJSONObject(i) ?: continue
                                                         if (season.optInt("number") == 0) continue
-                                                        var seasonMenu by remember(season.optInt("number")) { mutableStateOf(false) }
+                                                        val seasonNumber = season.optInt("number")
+                                                        var seasonMenu by remember(seasonNumber) { mutableStateOf(false) }
+                                                        var seasonExpanded by remember(seasonNumber) { mutableStateOf(false) }
                                                         val seasonStatus = season.optString("status", "WATCHLIST")
+                                                        val episodeList = season.optJSONArray("episodeList") ?: JSONArray()
+                                                        val watchedInSeason = (0 until episodeList.length()).count { episodeList.optJSONObject(it)?.optBoolean("watched", false) == true }
                                                         val seasonLabel = when (seasonStatus) { "WATCHED" -> "JÁ ASSISTIDA"; "WATCHING" -> "EM ANDAMENTO"; else -> "QUERO ASSISTIR" }
-                                                        val seasonAccent = when (seasonStatus) {
-                                                            "WATCHED" -> Color(0xFFC29AFF)
-                                                            "WATCHING" -> Color(0xFFC29AFF)
-                                                            else -> Muted
-                                                        }
-                                                        val seasonBackground = when (seasonStatus) {
-                                                            "WATCHED" -> Color(0xFF2A2040)
-                                                            "WATCHING" -> Color(0xFF2A2040)
-                                                            else -> Panel
-                                                        }
-                                                        Box(Modifier.fillMaxWidth()) {
-                                                            OutlinedButton(
-                                                                onClick = { seasonMenu = true },
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                colors = ButtonDefaults.outlinedButtonColors(containerColor = seasonBackground)
-                                                            ) {
-                                                                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                        val seasonAccent = if (seasonStatus == "WATCHLIST") Muted else Color(0xFFC29AFF)
+                                                        val seasonBackground = if (seasonStatus == "WATCHLIST") Panel else Color(0xFF2A2040)
+                                                        Column(Modifier.fillMaxWidth().background(seasonBackground, RoundedCornerShape(12.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                Column(Modifier.weight(1f).clickable { seasonExpanded = !seasonExpanded }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                                     Text(season.optString("name"), color = TextMain, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                                    Text("${season.optInt("episodes")} episódios • ${season.optString("airDate")}", color = Muted, fontSize = 11.sp)
+                                                                    Text("${watchedInSeason}/${episodeList.length()} episódios • ${season.optString("airDate")}", color = Muted, fontSize = 11.sp)
                                                                     Text(seasonLabel, color = seasonAccent, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp)
                                                                 }
-                                                            }
-                                                            DropdownMenu(expanded = seasonMenu, onDismissRequest = { seasonMenu = false }) {
-                                                                listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (newStatus, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                                        season.put("status", newStatus)
-                                                                        detailSeasons = seasons.toString()
-                                                                        seasonMenu = false
-                                                                        lifecycleScope.launch {
-                                                                            val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
-                                                                            val current = existing ?: selectedTitle.toMediaItem()
-                                                                            val imported = JSONArray(detailSeasons)
-                                                                            val count = (0 until imported.length()).count { (imported.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
-                                                                            val episodes = (0 until imported.length()).sumOf { imported.optJSONObject(it)?.optInt("episodes", 0) ?: 0 }
-                                                                            dao.insert(current.copy(totalSeasons = count, totalEpisodes = episodes, seasonProgress = detailSeasons))
+                                                                TextButton(onClick = { seasonExpanded = !seasonExpanded }) { Text(if (seasonExpanded) "Recolher" else "Episódios") }
+                                                                Box {
+                                                                    TextButton(onClick = { seasonMenu = true }) { Text("Status") }
+                                                                    DropdownMenu(expanded = seasonMenu, onDismissRequest = { seasonMenu = false }) {
+                                                                        listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (newStatus, label) ->
+                                                                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                                if (newStatus == "WATCHED") {
+                                                                                    for (j in 0 until episodeList.length()) episodeList.optJSONObject(j)?.put("watched", true)
+                                                                                }
+                                                                                season.put("status", newStatus)
+                                                                                season.put("episodeList", episodeList)
+                                                                                detailSeasons = seasons.toString()
+                                                                                seasonMenu = false
+                                                                                lifecycleScope.launch {
+                                                                                    val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                                                    val current = existing ?: selectedTitle.toMediaItem()
+                                                                                    val imported = JSONArray(detailSeasons)
+                                                                                    val count = (0 until imported.length()).count { (imported.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
+                                                                                    val total = (0 until imported.length()).sumOf { imported.optJSONObject(it)?.optJSONArray("episodeList")?.length() ?: 0 }
+                                                                                    val watched = (0 until imported.length()).sumOf { s -> val eps = imported.optJSONObject(s)?.optJSONArray("episodeList"); if (eps == null) 0 else (0 until eps.length()).count { eps.optJSONObject(it)?.optBoolean("watched", false) == true } }
+                                                                                    dao.insert(current.copy(totalSeasons = count, totalEpisodes = total, watchedEpisodes = watched, seasonProgress = detailSeasons))
+                                                                                }
+                                                                            })
                                                                         }
-                                                                    })
+                                                                    }
+                                                                }
+                                                            }
+                                                            if (seasonExpanded) {
+                                                                if (episodeList.length() == 0) Text("Lista de episódios indisponível.", color = Muted, fontSize = 11.sp)
+                                                                for (j in 0 until episodeList.length()) {
+                                                                    val episode = episodeList.optJSONObject(j) ?: continue
+                                                                    val watched = episode.optBoolean("watched", false)
+                                                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                                        Checkbox(checked = watched, onCheckedChange = { checked ->
+                                                                            episode.put("watched", checked)
+                                                                            val allWatched = episodeList.length() > 0 && (0 until episodeList.length()).all { episodeList.optJSONObject(it)?.optBoolean("watched", false) == true }
+                                                                            season.put("episodeList", episodeList)
+                                                                            season.put("status", if (allWatched) "WATCHED" else if (checked || watchedInSeason > 0) "WATCHING" else "WATCHLIST")
+                                                                            detailSeasons = seasons.toString()
+                                                                            lifecycleScope.launch {
+                                                                                val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                                                val current = existing ?: selectedTitle.toMediaItem()
+                                                                                val imported = JSONArray(detailSeasons)
+                                                                                val count = (0 until imported.length()).count { (imported.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
+                                                                                val total = (0 until imported.length()).sumOf { imported.optJSONObject(it)?.optJSONArray("episodeList")?.length() ?: 0 }
+                                                                                val totalWatched = (0 until imported.length()).sumOf { s -> val eps = imported.optJSONObject(s)?.optJSONArray("episodeList"); if (eps == null) 0 else (0 until eps.length()).count { eps.optJSONObject(it)?.optBoolean("watched", false) == true } }
+                                                                                dao.insert(current.copy(totalSeasons = count, totalEpisodes = total, watchedEpisodes = totalWatched, seasonProgress = detailSeasons))
+                                                                            }
+                                                                        })
+                                                                        Column(Modifier.weight(1f)) {
+                                                                            Text("E${episode.optInt("number")} • ${episode.optString("name")}", color = TextMain, fontSize = 12.sp)
+                                                                            if (episode.optString("airDate").isNotBlank()) Text(episode.optString("airDate"), color = Muted, fontSize = 10.sp)
+                                                                        }
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -707,6 +737,20 @@ class MainActivity : ComponentActivity() {
                                                                 val oldSeason = saved.optJSONObject(j) ?: continue
                                                                 if (oldSeason.optInt("number") == season.optInt("number")) {
                                                                     season.put("status", oldSeason.optString("status", "WATCHLIST"))
+                                                                    val oldEpisodes = oldSeason.optJSONArray("episodeList")
+                                                                    val newEpisodes = season.optJSONArray("episodeList")
+                                                                    if (oldEpisodes != null && newEpisodes != null) {
+                                                                        for (e in 0 until newEpisodes.length()) {
+                                                                            val newEpisode = newEpisodes.optJSONObject(e) ?: continue
+                                                                            for (oe in 0 until oldEpisodes.length()) {
+                                                                                val oldEpisode = oldEpisodes.optJSONObject(oe) ?: continue
+                                                                                if (oldEpisode.optInt("number") == newEpisode.optInt("number")) {
+                                                                                    newEpisode.put("watched", oldEpisode.optBoolean("watched", false))
+                                                                                    break
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
                                                                     break
                                                                 }
                                                             }
