@@ -106,6 +106,9 @@ object TmdbClient {
     suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
 
+    suspend fun movieReleaseInfo(id: Int, credential: String): JSONObject =
+        requestObject("/movie/$id", credential, mapOf("language" to "pt-BR"))
+
     suspend fun seriesSeasons(id: Int, credential: String): String =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
             .optJSONArray("seasons")?.let { seasons ->
