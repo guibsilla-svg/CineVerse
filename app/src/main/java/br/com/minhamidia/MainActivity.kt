@@ -700,8 +700,8 @@ class MainActivity : ComponentActivity() {
                                     startActivity(Intent.createChooser(send, "Exportar backup CineVerso"))
                                 }, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup JSON") }
                                 Text("O backup contém os dados da coleção. Guarde o arquivo em local seguro.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                                Text("ALERTAS DE EPISÓDIOS", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text("O CineVerso verifica a cada 12 horas os próximos episódios das séries marcadas como Tô assistindo. Os avisos são enviados para episódios com data prevista para hoje ou nos próximos dois dias. As datas dependem das informações disponíveis no TMDB.", color = Muted, fontSize = 12.sp)
+                                Text("ALERTAS DE ESTREIAS E EPISÓDIOS", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("O CineVerso verifica a cada 12 horas os próximos episódios das séries marcadas como Tô assistindo e as estreias dos filmes em Quero assistir. Os avisos de episódios cobrem hoje e os próximos dois dias; os de filmes, os próximos sete dias. As datas dependem das informações disponíveis no TMDB.", color = Muted, fontSize = 12.sp)
                                 OutlinedButton(onClick = { if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.fillMaxWidth()) { Text("Ativar permissão de notificações") }
                                 }
                             }
