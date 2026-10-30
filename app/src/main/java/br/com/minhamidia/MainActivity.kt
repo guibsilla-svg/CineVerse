@@ -96,7 +96,8 @@ class MainActivity : ComponentActivity() {
                     recommendationsError = ""
                 }
             }
-            val visible = all.filter { media ->
+            val availableYears = all.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending()
+            val visibleUnsorted = all.filter { media ->
                 val statusMatches = when (filter) {
                     "Quero assistir" -> media.status == "WATCHLIST"
                     "Tô assistindo" -> media.status == "WATCHING"
@@ -104,11 +105,18 @@ class MainActivity : ComponentActivity() {
                     else -> false
                 }
                 val categoryMatches = when (categoryFilter) {
-                    "Filme" -> media.mediaType == "movie"
-                    "Série" -> media.mediaType == "tv"
+                    "FILMES" -> media.mediaType == "movie"
+                    "SÉRIES" -> media.mediaType == "tv"
                     else -> true
                 }
-                statusMatches && categoryMatches
+                statusMatches && (yearFilter == "Todos" || media.year == yearFilter) && categoryMatches
+            }
+            val visible = when (sortMode) {
+                "A–Z" -> visibleUnsorted.sortedBy { it.title.lowercase(java.util.Locale.ROOT) }
+                "Ano (mais recente)" -> visibleUnsorted.sortedByDescending { it.year.toIntOrNull() ?: 0 }
+                "Inclusão (mais recente)" -> visibleUnsorted.sortedByDescending { it.id }
+                "Inclusão (mais antiga)" -> visibleUnsorted.sortedBy { it.id }
+                else -> visibleUnsorted.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id })
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = Purple, background = Night, surface = Panel, onBackground = TextMain, onSurface = TextMain)) {
                 Surface(Modifier.fillMaxSize(), color = Night) {
@@ -193,7 +201,27 @@ class MainActivity : ComponentActivity() {
                                     Text("Categoria:", color = Muted, fontSize = 12.sp)
                                     listOf("FILMES", "SÉRIES").forEach { item -> FilterChip(selected = categoryFilter == item, onClick = { categoryFilter = item; yearFilter = "Todos" }, label = { Text(item, fontSize = 11.sp) }) }
                                 }
-                                Text("${visible.size} títulos", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    var yearMenu by remember { mutableStateOf(false) }
+                                    var sortMenu by remember { mutableStateOf(false) }
+                                    Box {
+                                        OutlinedButton(onClick = { yearMenu = true }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) { Text("Ano: $yearFilter", fontSize = 11.sp) }
+                                        DropdownMenu(expanded = yearMenu, onDismissRequest = { yearMenu = false }) {
+                                            (listOf("Todos") + availableYears.map { it.toString() }).forEach { year ->
+                                                DropdownMenuItem(text = { Text(year) }, onClick = { yearFilter = year; yearMenu = false })
+                                            }
+                                        }
+                                    }
+                                    Box(Modifier.weight(1f)) {
+                                        OutlinedButton(onClick = { sortMenu = true }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) { Text("Ordenar: $sortMode", fontSize = 11.sp, maxLines = 1) }
+                                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                                            listOf("Manual", "A–Z", "Ano (mais recente)", "Inclusão (mais recente)", "Inclusão (mais antiga)").forEach { mode ->
+                                                DropdownMenuItem(text = { Text(mode) }, onClick = { sortMode = mode; sortMenu = false })
+                                            }
+                                        }
+                                    }
+                                }
+                                Text("${visible.size} títulos • No modo Manual, use ↑ e ↓ para agrupar franquias.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                     items(visible, key = { it.id }) { media ->
                                         MediaCard(media, favorites.contains(media.id.toString()),
