@@ -58,6 +58,13 @@ private val Panel = Color(0xFF171321)
 private val Purple = Color(0xFFAC65FF)
 private val TextMain = Color(0xFFF7F3FF)
 private val Muted = Color(0xFFB7AEC6)
+private fun cinePalette(name: String): Triple<Color, Color, Color> = when (name) {
+    "Azul" -> Triple(Color(0xFF07101C), Color(0xFF111F32), Color(0xFF54B8FF))
+    "Rubi" -> Triple(Color(0xFF18090E), Color(0xFF2B111B), Color(0xFFFF6685))
+    "Esmeralda" -> Triple(Color(0xFF07140F), Color(0xFF12251C), Color(0xFF55D6A0))
+    "Dourado" -> Triple(Color(0xFF171108), Color(0xFF29200F), Color(0xFFE6B95C))
+    else -> Triple(Night, Panel, Purple)
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +94,9 @@ class MainActivity : ComponentActivity() {
                 }
                 if (release != null) { updateVersion = release.first; updateApkUrl = release.second }
             }
+            var paletteName by remember { mutableStateOf(prefs.getString("palette", "Roxo") ?: "Roxo") }
+            val palette = cinePalette(paletteName)
+            var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
@@ -240,8 +250,8 @@ class MainActivity : ComponentActivity() {
                 "Inclusão (mais antiga)" -> visibleUnsorted.sortedBy { it.id }
                 else -> visibleUnsorted.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id })
             }
-            MaterialTheme(colorScheme = darkColorScheme(primary = Purple, background = Night, surface = Panel, onBackground = TextMain, onSurface = TextMain)) {
-                Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = Night) {
+            MaterialTheme(colorScheme = darkColorScheme(primary = palette.third, background = palette.first, surface = palette.second, onBackground = TextMain, onSurface = TextMain)) {
+                Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = palette.first) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         Spacer(Modifier.height(18.dp))
                         androidx.compose.foundation.Image(
@@ -620,7 +630,25 @@ class MainActivity : ComponentActivity() {
                                 Spacer(Modifier.weight(1f))
                             }
                             "Config." -> {
-                                Text("INTEGRAÇÃO TMDB", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("PERSONALIZAÇÃO VISUAL", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Escolha a identidade de cores do CineVerso.", color = Muted, fontSize = 12.sp)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf("Roxo", "Azul", "Rubi", "Esmeralda", "Dourado").forEach { option ->
+                                        FilterChip(selected = paletteName == option, onClick = { paletteName = option; prefs.edit().putString("palette", option).apply() }, label = { Text(option, fontSize = 10.sp) })
+                                    }
+                                }
+                                Text("ORGANIZAÇÃO DA PÁGINA INICIAL", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                listOf("Padrão", "Minha coleção primeiro", "Descobertas primeiro").forEach { option ->
+                                    Row(Modifier.fillMaxWidth().clickable { homeOrder = option; prefs.edit().putString("home_order", option).apply() }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(selected = homeOrder == option, onClick = { homeOrder = option; prefs.edit().putString("home_order", option).apply() })
+                                        Text(option, color = TextMain, fontSize = 13.sp)
+                                    }
+                                }
+                                Text("ACESSO OFFLINE", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Sua coleção, avaliações, favoritos e progresso ficam salvos localmente. Esses dados continuam disponíveis sem internet; novas buscas, pôsteres não armazenados e atualizações do catálogo exigem conexão.", color = Muted, fontSize = 12.sp)
+                                Divider(color = Muted.copy(alpha = .25f))
+                                Text("INTEGRAÇÃO TMDB", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("A chave fica salva neste aparelho e é usada para buscar títulos, sinopses e pôsteres.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 Button(onClick = { showKey = true }, modifier = Modifier.fillMaxWidth()) { Text(if (apiKey.isBlank()) "Configurar chave TMDB" else "Alterar chave TMDB") }
                                 Spacer(Modifier.height(8.dp))
@@ -631,7 +659,8 @@ class MainActivity : ComponentActivity() {
                                     startActivity(Intent.createChooser(send, "Exportar backup CineVerso"))
                                 }, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup JSON") }
                                 Text("O backup contém os dados da coleção. Guarde o arquivo em local seguro.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                                Spacer(Modifier.weight(1f))
+                                Text("Notificações de estreias e episódios: integração ainda pendente.", color = Muted, fontSize = 11.sp)
+                                }
                             }
                             else -> {
                                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
@@ -812,7 +841,7 @@ class MainActivity : ComponentActivity() {
                                         try {
                                             rouletteWheelRotation.animateTo(
                                                 rouletteWheelRotation.value + 1800f + (360..900).random(),
-                                                animationSpec = tween(durationMillis = 3600, easing = FastOutSlowInEasing)
+                                                animationSpec = tween(durationMillis = 5200, easing = FastOutSlowInEasing)
                                             )
                                             val pool = if (rouletteMode == "LIST") options else {
                                                 var found: List<TmdbResult> = emptyList()
