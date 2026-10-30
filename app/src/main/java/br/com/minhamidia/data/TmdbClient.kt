@@ -71,7 +71,7 @@ object TmdbClient {
         return request(endpoint, credential, params)
     }
 
-    suspend fun discoverRandom(type: String, genreId: Int?, credential: String): List<TmdbResult> {
+    suspend fun discoverRandom(type: String, genreId: Int?, year: String?, credential: String): List<TmdbResult> {
         val endpoint = if (type == "tv") "/discover/tv" else "/discover/movie"
         val base = mutableMapOf(
             "language" to "pt-BR",
@@ -80,6 +80,7 @@ object TmdbClient {
             "page" to "1"
         )
         if (genreId != null) base["with_genres"] = genreId.toString()
+        if (!year.isNullOrBlank()) base[if (type == "tv") "first_air_date_year" else "primary_release_year"] = year
         val firstPage = requestObject(endpoint, credential, base)
         val totalPages = firstPage.optInt("total_pages", 1).coerceIn(1, 500)
         val randomPage = (1..totalPages).random()
