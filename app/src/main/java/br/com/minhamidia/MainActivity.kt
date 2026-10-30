@@ -183,9 +183,13 @@ class MainActivity : ComponentActivity() {
                             }
                             "Minha lista" -> {
                                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
-                                    listOf("Todos", "Quero assistir", "Assistindo", "Assistidos", "Filmes", "Séries", "Favoritos").forEach { item ->
+                                    listOf("Quero assistir", "Tô assistindo", "Já assisti").forEach { item ->
                                         FilterChip(selected = filter == item, onClick = { filter = item }, label = { Text(item, fontSize = 10.sp) })
                                     }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                    Text("Categoria:", color = Muted, fontSize = 12.sp)
+                                    listOf("Todos", "Filme", "Série").forEach { item -> FilterChip(selected = categoryFilter == item, onClick = { categoryFilter = item }, label = { Text(item, fontSize = 11.sp) }) }
                                 }
                                 Text("${visible.size} títulos", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
