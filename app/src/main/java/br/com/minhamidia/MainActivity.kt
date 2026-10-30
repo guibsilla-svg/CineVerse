@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendationsLoading by remember { mutableStateOf(false) }
+            var recommendationsError by remember { mutableStateOf("") }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var showKey by remember { mutableStateOf(false) }
             var busy by remember { mutableStateOf(false) }
@@ -68,18 +69,26 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(apiKey) {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
+                    recommendationsError = ""
                     try {
-                        recommendedMovies = TmdbClient.trendingMovies(apiKey).take(12)
-                        recommendedShows = TmdbClient.trendingShows(apiKey).take(12)
-                    } catch (_: Exception) {
-                        recommendedMovies = emptyList()
-                        recommendedShows = emptyList()
+                        val movies = runCatching { TmdbClient.trendingMovies(apiKey) }
+                            .getOrElse { TmdbClient.popularMovies(apiKey) }
+                        recommendedMovies = movies.filter { it.posterPath != null }.take(12)
+                        val shows = runCatching { TmdbClient.trendingShows(apiKey) }
+                            .getOrElse { TmdbClient.popularShows(apiKey) }
+                        recommendedShows = shows.filter { it.posterPath != null }.take(12)
+                        if (recommendedMovies.isEmpty() && recommendedShows.isEmpty()) {
+                            recommendationsError = "O TMDB não retornou títulos para as recomendações."
+                        }
+                    } catch (e: Exception) {
+                        recommendationsError = e.message ?: "Não foi possível carregar as recomendações."
                     } finally {
                         recommendationsLoading = false
                     }
                 } else {
                     recommendedMovies = emptyList()
                     recommendedShows = emptyList()
+                    recommendationsError = ""
                 }
             }
             val visible = all.filter { media ->
@@ -260,7 +269,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 } else {
-                                    Text(if (apiKey.isBlank()) "Configure o TMDB em Mais > Config. para carregar recomendações." else if (recommendationsLoading) "Carregando..." else "Não foi possível carregar filmes em alta. Confira a credencial.", color = Muted, fontSize = 12.sp)
+                                    Text(if (apiKey.isBlank()) "Configure o TMDB em Mais > Config. para carregar recomendações." else if (recommendationsLoading) "Carregando..." else recommendationsError.ifBlank { "Sem recomendações disponíveis no momento." }, color = Muted, fontSize = 12.sp)
                                 }
                                 Spacer(Modifier.height(14.dp))
                                 Text("EM ALTA • SÉRIES", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -277,7 +286,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 } else if (apiKey.isNotBlank() && !recommendationsLoading) {
-                                    Text("Recomendações de séries indisponíveis no momento.", color = Muted, fontSize = 12.sp)
+                                    Text(recommendationsError.ifBlank { "Recomendações de séries indisponíveis no momento." }, color = Muted, fontSize = 12.sp)
                                 }
                                 Spacer(Modifier.height(14.dp))
                                 Text("ACESSO RÁPIDO", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
