@@ -52,7 +52,9 @@ class MainActivity : ComponentActivity() {
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
             var filter by remember { mutableStateOf("Quero assistir") }
-            var categoryFilter by remember { mutableStateOf("Todos") }
+            var categoryFilter by remember { mutableStateOf("FILMES") }
+            var yearFilter by remember { mutableStateOf("Todos") }
+            var sortMode by remember { mutableStateOf("Manual") }
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
@@ -189,7 +191,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                                     Text("Categoria:", color = Muted, fontSize = 12.sp)
-                                    listOf("Todos", "Série").forEach { item -> FilterChip(selected = categoryFilter == item, onClick = { categoryFilter = item }, label = { Text(item, fontSize = 11.sp) }) }
+                                    listOf("FILMES", "SÉRIES").forEach { item -> FilterChip(selected = categoryFilter == item, onClick = { categoryFilter = item; yearFilter = "Todos" }, label = { Text(item, fontSize = 11.sp) }) }
                                 }
                                 Text("${visible.size} títulos", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
