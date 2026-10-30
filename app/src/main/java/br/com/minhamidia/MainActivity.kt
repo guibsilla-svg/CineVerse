@@ -819,14 +819,15 @@ class MainActivity : ComponentActivity() {
                                     selected = page == destination,
                                     onClick = { navigateTo(destination) },
                                     icon = {
-                                        Icon(
-                                            imageVector = when (destination) {
-                                                "Início" -> Icons.Default.Home
-                                                "Explorar" -> Icons.Default.Explore
-                                                "Buscar" -> Icons.Default.Search
-                                                else -> Icons.Default.Bookmarks
+                                        Text(
+                                            when (destination) {
+                                                "Início" -> "⌂"
+                                                "Explorar" -> "✦"
+                                                "Buscar" -> "⌕"
+                                                else -> "▣"
                                             },
-                                            contentDescription = destination
+                                            fontSize = 20.sp,
+                                            color = if (page == destination) Purple else Muted
                                         )
                                     },
                                     label = { Text(destination, fontSize = 9.sp, maxLines = 1) },
@@ -838,7 +839,7 @@ class MainActivity : ComponentActivity() {
                                 NavigationBarItem(
                                     selected = page in listOf("Estatísticas", "Calendário", "Config."),
                                     onClick = { moreMenu = true },
-                                    icon = { Icon(Icons.Default.MoreHoriz, contentDescription = "Mais") },
+                                    icon = { Text("•••", color = Muted, fontSize = 18.sp) },
                                     label = { Text("Mais", fontSize = 9.sp) }
                                 )
                                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
