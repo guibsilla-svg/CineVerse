@@ -862,8 +862,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                     Text(if (rouletteMode == "LIST") "Títulos da sua coleção que ainda não foram assistidos." else "Catálogo completo do TMDB: sorteio em páginas aleatórias, sem ficar preso aos títulos em alta." , color = Muted, fontSize = 11.sp)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Button(onClick = { rouletteType = "movie"; rouletteGenre = "Todos"; rouletteSuggestion = null }, modifier = Modifier.weight(1f), enabled = !rouletteSpinning) { Text("🎬 Filme") }
-                                        OutlinedButton(onClick = { rouletteType = "tv"; rouletteGenre = "Todos"; rouletteSuggestion = null }, modifier = Modifier.weight(1f), enabled = !rouletteSpinning) { Text("📺 Série") }
+                                        FilterChip(selected = rouletteType == "movie", onClick = { rouletteType = "movie"; rouletteGenre = "Todos"; rouletteSuggestion = null; rouletteCarouselItems = emptyList() }, enabled = !rouletteSpinning, label = { Text("Filme") })
+                                        FilterChip(selected = rouletteType == "tv", onClick = { rouletteType = "tv"; rouletteGenre = "Todos"; rouletteSuggestion = null; rouletteCarouselItems = emptyList() }, enabled = !rouletteSpinning, label = { Text("Série") })
                                     }
                                     if (rouletteMode == "DISCOVER") {
                                         Box {
