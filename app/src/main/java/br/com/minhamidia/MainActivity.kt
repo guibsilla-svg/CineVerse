@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -51,6 +52,20 @@ class MainActivity : ComponentActivity() {
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
+            val pageHistory = remember { mutableStateListOf<String>() }
+            fun navigateTo(destination: String) {
+                if (destination != page) {
+                    pageHistory.add(page)
+                    page = destination
+                }
+            }
+            BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
+                when {
+                    showKey -> showKey = false
+                    editingSeries != null -> editingSeries = null
+                    pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
+                }
+            }
             var filter by remember { mutableStateOf("Quero assistir") }
             var categoryFilter by remember { mutableStateOf("FILMES") }
             var yearFilter by remember { mutableStateOf("Todos") }
@@ -152,14 +167,14 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("Início", "Buscar", "Minha lista").forEach { tab ->
-                                FilterChip(selected = page == tab, onClick = { page = tab }, label = { Text(tab, fontSize = 11.sp) })
+                                FilterChip(selected = page == tab, onClick = { navigateTo(tab) }, label = { Text(tab, fontSize = 11.sp) })
                             }
                             Box {
                                 var menu by remember { mutableStateOf(false) }
                                 FilterChip(selected = page in listOf("Estatísticas", "Calendário", "Roleta", "Config."), onClick = { menu = true }, label = { Text("Mais ▾", fontSize = 11.sp) })
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                     listOf("Estatísticas", "Calendário", "Roleta", "Config.").forEach { item ->
-                                        DropdownMenuItem(text = { Text(item) }, onClick = { page = item; menu = false })
+                                        DropdownMenuItem(text = { Text(item) }, onClick = { navigateTo(item); menu = false })
                                     }
                                 }
                             }
@@ -185,7 +200,7 @@ class MainActivity : ComponentActivity() {
                                     items(results, key = { "${it.type}-${it.id}" }) { item ->
                                         SearchCard(item, onOpen = {
                                             detailItem = item
-                                            page = "Detalhes"
+                                            navigateTo("Detalhes")
                                             if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                 detailLoading = true
                                                 detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
@@ -201,7 +216,7 @@ class MainActivity : ComponentActivity() {
                                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                                         item {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                TextButton(onClick = { page = detailReturnPage }) { Text("← Voltar") }
+                                                TextButton(onClick = { page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage }) { Text("← Voltar") }
                                                 Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
@@ -228,7 +243,7 @@ class MainActivity : ComponentActivity() {
                                                             media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
                                                         }
                                                         dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
-                                                        page = "Minha lista"
+                                                        navigateTo("Minha lista")
                                                     }
                                                 }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                                             }
@@ -311,7 +326,7 @@ class MainActivity : ComponentActivity() {
                                                     detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
                                                     detailReturnPage = "Minha lista"
                                                     detailSeasons = media.seasonProgress.ifBlank { "[]" }
-                                                    page = "Detalhes"
+                                                    navigateTo("Detalhes")
                                                     if (media.mediaType == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                         detailLoading = true
                                                         val imported = runCatching { TmdbClient.seriesSeasons(media.tmdbId ?: 0, apiKey) }.getOrDefault("[]")
@@ -379,7 +394,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                         Spacer(Modifier.height(18.dp))
                                         Button(onClick = { roulettePick = all.filter { it.status != "WATCHED" }.randomOrNull() ?: all.randomOrNull(); if (roulettePick == null) message = "Adicione títulos à coleção primeiro." }, modifier = Modifier.fillMaxWidth()) { Text("Sortear título") }
-                                        TextButton(onClick = { page = "Buscar" }) { Text("Adicionar mais títulos") }
+                                        TextButton(onClick = { navigateTo("Buscar") }) { Text("Adicionar mais títulos") }
                                     }
                                 }
                                 Spacer(Modifier.weight(1f))
@@ -413,7 +428,7 @@ class MainActivity : ComponentActivity() {
                                         items(recommendedMovies, key = { "movie-" + it.id }) { item ->
                                             RecommendationCard(item) {
                                                 detailItem = item
-                                                page = "Detalhes"
+                                                navigateTo("Detalhes")
                                                 if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                     detailLoading = true
                                                     detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
@@ -433,7 +448,7 @@ class MainActivity : ComponentActivity() {
                                         items(recommendedShows, key = { "tv-" + it.id }) { item ->
                                             RecommendationCard(item) {
                                                 detailItem = item
-                                                page = "Detalhes"
+                                                navigateTo("Detalhes")
                                                 if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                     detailLoading = true
                                                     detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
@@ -448,8 +463,8 @@ class MainActivity : ComponentActivity() {
                                 Spacer(Modifier.height(14.dp))
                                 Text("ACESSO RÁPIDO", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = { page = "Buscar" }, modifier = Modifier.weight(1f)) { Text("Buscar títulos") }
-                                    OutlinedButton(onClick = { page = "Roleta" }, modifier = Modifier.weight(1f)) { Text("Roleta") }
+                                    Button(onClick = { navigateTo("Buscar") }, modifier = Modifier.weight(1f)) { Text("Buscar títulos") }
+                                    OutlinedButton(onClick = { navigateTo("Roleta") }, modifier = Modifier.weight(1f)) { Text("Roleta") }
                                 }
                                 Text("ADICIONADOS RECENTEMENTE", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
                                 if (all.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Sua coleção está vazia. Pesquise um filme ou série para começar.", color = Muted) }
