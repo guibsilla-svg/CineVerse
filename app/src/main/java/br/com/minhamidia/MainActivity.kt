@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -51,12 +52,32 @@ class MainActivity : ComponentActivity() {
             var page by remember { mutableStateOf("Início") }
             var filter by remember { mutableStateOf("Todos") }
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
+            var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
+            var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
+            var recommendationsLoading by remember { mutableStateOf(false) }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var showKey by remember { mutableStateOf(false) }
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+            LaunchedEffect(apiKey) {
+                if (apiKey.isNotBlank()) {
+                    recommendationsLoading = true
+                    try {
+                        recommendedMovies = TmdbClient.trendingMovies(apiKey).take(12)
+                        recommendedShows = TmdbClient.trendingShows(apiKey).take(12)
+                    } catch (_: Exception) {
+                        recommendedMovies = emptyList()
+                        recommendedShows = emptyList()
+                    } finally {
+                        recommendationsLoading = false
+                    }
+                } else {
+                    recommendedMovies = emptyList()
+                    recommendedShows = emptyList()
+                }
+            }
             val visible = all.filter { media ->
                 when (filter) {
                     "Filmes" -> media.mediaType == "movie"
@@ -220,6 +241,40 @@ class MainActivity : ComponentActivity() {
                                     Box(Modifier.weight(1f)) { StatCard("Assistindo", all.count { it.status == "WATCHING" }.toString(), "Em andamento") }
                                 }
                                 Spacer(Modifier.height(14.dp))
+                                Text("EM ALTA • FILMES", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(8.dp))
+                                if (recommendedMovies.isNotEmpty()) {
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        items(recommendedMovies, key = { "movie-" + it.id }) { item ->
+                                            RecommendationCard(item) {
+                                                lifecycleScope.launch {
+                                                    if (dao.findByTmdbId(item.id, item.type) == null) dao.insert(item.toMediaItem())
+                                                    page = "Minha lista"
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Text(if (apiKey.isBlank()) "Configure o TMDB em Mais > Config. para carregar recomendações." else if (recommendationsLoading) "Carregando..." else "Não foi possível carregar filmes em alta. Confira a credencial.", color = Muted, fontSize = 12.sp)
+                                }
+                                Spacer(Modifier.height(14.dp))
+                                Text("EM ALTA • SÉRIES", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(8.dp))
+                                if (recommendedShows.isNotEmpty()) {
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        items(recommendedShows, key = { "tv-" + it.id }) { item ->
+                                            RecommendationCard(item) {
+                                                lifecycleScope.launch {
+                                                    if (dao.findByTmdbId(item.id, item.type) == null) dao.insert(item.toMediaItem())
+                                                    page = "Minha lista"
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (apiKey.isNotBlank() && !recommendationsLoading) {
+                                    Text("Recomendações de séries indisponíveis no momento.", color = Muted, fontSize = 12.sp)
+                                }
+                                Spacer(Modifier.height(14.dp))
                                 Text("ACESSO RÁPIDO", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(onClick = { page = "Buscar" }, modifier = Modifier.weight(1f)) { Text("Buscar títulos") }
@@ -242,13 +297,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 if (showKey) {
-                    AlertDialog(onDismissRequest = { showKey = false }, title = { Text("Chave da API TMDB") },
-                        text = { Column { Text("A chave é salva localmente neste aparelho."); Spacer(Modifier.height(8.dp)); OutlinedTextField(value = apiKey, onValueChange = { apiKey = it.trim() }, label = { Text("API key") }, singleLine = true) } },
+                    AlertDialog(onDismissRequest = { showKey = false }, title = { Text("Credencial da API TMDB") },
+                        text = { Column { Text("Cole a API Read Access Token (Bearer) ou a API Key v3. Ambas ficam em themoviedb.org/settings/api."); Spacer(Modifier.height(8.dp)); OutlinedTextField(value = apiKey, onValueChange = { apiKey = it.trim() }, label = { Text("Token Bearer ou API Key v3") }, singleLine = true) } },
                         confirmButton = { TextButton(onClick = { prefs.edit().putString("tmdb_key", apiKey.trim()).apply(); showKey = false; message = "Chave salva neste aparelho." }) { Text("Salvar") } },
                         dismissButton = { TextButton(onClick = { showKey = false }) { Text("Cancelar") } })
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun RecommendationCard(item: TmdbResult, onAdd: () -> Unit) {
+    Column(Modifier.width(116.dp).clickable(onClick = onAdd), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (!item.posterPath.isNullOrBlank()) {
+            AsyncImage(model = "https://image.tmdb.org/t/p/w342" + item.posterPath, contentDescription = item.title, modifier = Modifier.fillMaxWidth().height(166.dp))
+        } else {
+            Box(Modifier.fillMaxWidth().height(166.dp).background(Panel, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                Text("CineVerse", color = Purple, fontSize = 12.sp)
+            }
+        }
+        Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
+        Text((item.year.ifBlank { "Em alta" }) + " • + Minha lista", color = Muted, fontSize = 10.sp)
     }
 }
 
