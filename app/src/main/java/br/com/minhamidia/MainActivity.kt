@@ -313,7 +313,7 @@ class MainActivity : ComponentActivity() {
                                 var menu by remember { mutableStateOf(false) }
                                 FilterChip(selected = page in listOf("Estatísticas", "Calendário", "Config."), onClick = { menu = true }, label = { Text("Mais ▾", fontSize = 11.sp) })
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    listOf("Estatísticas", "Calendário", "Roleta", "Config.").forEach { item ->
+                                    listOf("Estatísticas", "Calendário", "Config.").forEach { item ->
                                         DropdownMenuItem(text = { Text(item) }, onClick = { navigateTo(item); menu = false })
                                     }
                                 }
