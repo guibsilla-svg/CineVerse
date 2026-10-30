@@ -673,15 +673,19 @@ class MainActivity : ComponentActivity() {
                                         Button(onClick = { rouletteType = "movie"; rouletteGenre = "Todos"; rouletteSuggestion = null }, modifier = Modifier.weight(1f), enabled = !rouletteSpinning) { Text("🎬 Filme") }
                                         OutlinedButton(onClick = { rouletteType = "tv"; rouletteGenre = "Todos"; rouletteSuggestion = null }, modifier = Modifier.weight(1f), enabled = !rouletteSpinning) { Text("📺 Série") }
                                     }
-                                    Box {
-                                        OutlinedButton(onClick = { rouletteGenreMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !rouletteSpinning) {
-                                            Text("Gênero: $rouletteGenre  ▾")
-                                        }
-                                        DropdownMenu(expanded = rouletteGenreMenu, onDismissRequest = { rouletteGenreMenu = false }) {
-                                            genreOptions.forEach { (name, _) ->
-                                                DropdownMenuItem(text = { Text(name) }, onClick = { rouletteGenre = name; rouletteSuggestion = null; rouletteGenreMenu = false })
+                                    if (rouletteMode == "DISCOVER") {
+                                        Box {
+                                            OutlinedButton(onClick = { rouletteGenreMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !rouletteSpinning) {
+                                                Text("Gênero: $rouletteGenre  ▾")
+                                            }
+                                            DropdownMenu(expanded = rouletteGenreMenu, onDismissRequest = { rouletteGenreMenu = false }) {
+                                                genreOptions.forEach { (name, _) ->
+                                                    DropdownMenuItem(text = { Text(name) }, onClick = { rouletteGenre = name; rouletteSuggestion = null; rouletteGenreMenu = false })
+                                                }
                                             }
                                         }
+                                    } else {
+                                        Text("Gênero: não aplicado à coleção pessoal.", color = Muted, fontSize = 10.sp)
                                     }
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(190.dp)) {
                                         Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = rouletteWheelRotation.value }) {
