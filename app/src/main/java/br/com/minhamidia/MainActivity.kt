@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
             var rouletteSpinning by remember { mutableStateOf(false) }
             var rouletteGenre by remember { mutableStateOf("Todos") }
             var rouletteGenreMenu by remember { mutableStateOf(false) }
+            var rouletteError by remember { mutableStateOf("") }
             val rouletteWheelRotation = remember { Animatable(0f) }
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
             LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
@@ -606,24 +607,7 @@ class MainActivity : ComponentActivity() {
                                     Text(recommendationsError.ifBlank { "Recomendações de séries indisponíveis no momento." }, color = Muted, fontSize = 12.sp)
                                 }
                                 Spacer(Modifier.height(14.dp))
-                                Text("ACESSO RÁPIDO", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = { navigateTo("Buscar") }, modifier = Modifier.weight(1f)) { Text("Buscar títulos") }
-                                    OutlinedButton(onClick = { showRouletteDialog = true; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Minha lista") }
-                                }
-                                Text("ADICIONADOS RECENTEMENTE", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
-                                if (all.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Sua coleção está vazia. Pesquise um filme ou série para começar.", color = Muted) }
-                                else Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                    all.takeLast(12).reversed().forEach { media ->
-                                        MediaCard(media, favorites.contains(media.id.toString()),
-                                            onFavorite = { val next = favorites.toMutableSet(); if (!next.add(media.id.toString())) next.remove(media.id.toString()); favorites = next; prefs.edit().putStringSet("favorites", next).apply() },
-                                            onStatus = { status -> lifecycleScope.launch { dao.update(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt)) } },
-                                            
-                                            onProgress = { delta -> lifecycleScope.launch { dao.update(media.copy(watchedEpisodes = (media.watchedEpisodes + delta).coerceIn(0, if (media.totalEpisodes > 0) media.totalEpisodes else 9999))) } },
-                                            onEditProgress = { editingSeries = media; seasonInput = media.totalSeasons.toString(); totalEpisodesInput = media.totalEpisodes.toString(); watchedEpisodesInput = media.watchedEpisodes.toString() },
-                                            onDelete = { lifecycleScope.launch { dao.delete(media) } })
-                                    }
-                                }
+
                                 }
                             }
                         }
@@ -700,6 +684,7 @@ class MainActivity : ComponentActivity() {
                                         Text("▶", color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Black)
                                     }
                                     Text(if (rouletteSpinning) "A sorte está sendo lançada..." else "Toque em GIRAR e deixe a roleta decidir!", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    if (rouletteError.isNotBlank()) Text(rouletteError, color = Color(0xFFFF8A8A), fontSize = 11.sp)
                                 }
                             }
                         },
@@ -720,8 +705,14 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 TextButton(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty()), onClick = {
                                     rouletteSpinning = true
+                                    rouletteError = ""
+                                    rouletteSuggestion = null
                                     lifecycleScope.launch {
                                         try {
+                                            rouletteWheelRotation.animateTo(
+                                                rouletteWheelRotation.value + 1800f + (360..900).random(),
+                                                animationSpec = tween(durationMillis = 3600, easing = FastOutSlowInEasing)
+                                            )
                                             val pool = if (rouletteMode == "LIST") options else {
                                                 var found: List<TmdbResult> = emptyList()
                                                 repeat(5) {
@@ -733,16 +724,12 @@ class MainActivity : ComponentActivity() {
                                                 found
                                             }
                                             if (pool.isEmpty()) {
-                                                message = "Não encontrei títulos disponíveis com esse gênero. Tente outro filtro."
+                                                rouletteError = "Não encontrei títulos com esse filtro. Tente outro gênero."
                                             } else {
-                                                rouletteWheelRotation.animateTo(
-                                                    rouletteWheelRotation.value + 1440f + (90..720).random(),
-                                                    animationSpec = tween(durationMillis = 3200, easing = FastOutSlowInEasing)
-                                                )
                                                 rouletteSuggestion = pool.random()
                                             }
                                         } catch (error: Exception) {
-                                            message = error.message ?: "Não foi possível consultar o catálogo."
+                                            rouletteError = error.message ?: "Não foi possível consultar o catálogo. Confira sua conexão e a chave TMDB."
                                         } finally {
                                             rouletteSpinning = false
                                         }
