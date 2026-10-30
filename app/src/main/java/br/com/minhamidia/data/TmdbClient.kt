@@ -110,21 +110,37 @@ object TmdbClient {
     suspend fun movieReleaseInfo(id: Int, credential: String): JSONObject =
         requestObject("/movie/$id", credential, mapOf("language" to "pt-BR"))
 
-    suspend fun seriesSeasons(id: Int, credential: String): String =
-        requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
-            .optJSONArray("seasons")?.let { seasons ->
-                org.json.JSONArray().apply {
-                    for (i in 0 until seasons.length()) {
-                        val season = seasons.optJSONObject(i) ?: continue
+    suspend fun seriesSeasons(id: Int, credential: String): String {
+        val seasons = requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
+            .optJSONArray("seasons") ?: return "[]"
+        return org.json.JSONArray().apply {
+            for (i in 0 until seasons.length()) {
+                val season = seasons.optJSONObject(i) ?: continue
+                val number = season.optInt("season_number")
+                val episodeResults = runCatching {
+                    requestObject("/tv/$id/season/$number", credential, mapOf("language" to "pt-BR"))
+                        .optJSONArray("episodes") ?: org.json.JSONArray()
+                }.getOrDefault(org.json.JSONArray())
+                val episodes = org.json.JSONArray().apply {
+                    for (j in 0 until episodeResults.length()) {
+                        val episode = episodeResults.optJSONObject(j) ?: continue
                         put(org.json.JSONObject()
-                            .put("number", season.optInt("season_number"))
-                            .put("name", season.optString("name"))
-                            .put("episodes", season.optInt("episode_count"))
-                            .put("airDate", season.optString("air_date"))
-                            .put("status", if (season.optInt("season_number") == 0) "SPECIAL" else "WATCHLIST"))
+                            .put("number", episode.optInt("episode_number"))
+                            .put("name", episode.optString("name"))
+                            .put("airDate", episode.optString("air_date"))
+                            .put("watched", false))
                     }
-                }.toString()
-            } ?: "[]"
+                }
+                put(org.json.JSONObject()
+                    .put("number", number)
+                    .put("name", season.optString("name"))
+                    .put("episodes", season.optInt("episode_count"))
+                    .put("airDate", season.optString("air_date"))
+                    .put("episodeList", episodes)
+                    .put("status", if (number == 0) "SPECIAL" else "WATCHLIST"))
+            }
+        }.toString()
+    }
 
     private suspend fun requestObject(path: String, credential: String, parameters: Map<String, String>): JSONObject =
         withContext(Dispatchers.IO) {
