@@ -51,7 +51,8 @@ class MainActivity : ComponentActivity() {
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "") ?: "") }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
-            var filter by remember { mutableStateOf("Todos") }
+            var filter by remember { mutableStateOf("Quero assistir") }
+            var categoryFilter by remember { mutableStateOf("Todos") }
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
             var seasonInput by remember { mutableStateOf("") }
             var totalEpisodesInput by remember { mutableStateOf("") }
             var watchedEpisodesInput by remember { mutableStateOf("") }
+            var seasonProgressInput by remember { mutableStateOf("") }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
             LaunchedEffect(apiKey) {
@@ -93,15 +95,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val visible = all.filter { media ->
-                when (filter) {
-                    "Filmes" -> media.mediaType == "movie"
-                    "Séries" -> media.mediaType == "tv"
-                    "Favoritos" -> favorites.contains(media.id.toString())
+                val statusMatches = when (filter) {
                     "Quero assistir" -> media.status == "WATCHLIST"
-                    "Assistindo" -> media.status == "WATCHING"
-                    "Assistidos" -> media.status == "WATCHED"
+                    "Tô assistindo" -> media.status == "WATCHING"
+                    "Já assisti" -> media.status == "WATCHED"
+                    else -> false
+                }
+                val categoryMatches = when (categoryFilter) {
+                    "Filme" -> media.mediaType == "movie"
+                    "Série" -> media.mediaType == "tv"
                     else -> true
                 }
+                statusMatches && categoryMatches
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = Purple, background = Night, surface = Panel, onBackground = TextMain, onSurface = TextMain)) {
                 Surface(Modifier.fillMaxSize(), color = Night) {
@@ -110,7 +115,7 @@ class MainActivity : ComponentActivity() {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             androidx.compose.foundation.Image(
                                 painter = painterResource(id = R.drawable.cineverse_logo),
-                                contentDescription = "Logo oficial CineVerse",
+                                contentDescription = "Logo oficial CineVerso",
                                 modifier = Modifier.size(54.dp)
                             )
                             Column {
@@ -118,12 +123,11 @@ class MainActivity : ComponentActivity() {
                                     Text("Cine", fontSize = 25.sp, color = TextMain, fontWeight = FontWeight.ExtraBold)
                                     Text("Verse", fontSize = 25.sp, color = Purple, fontWeight = FontWeight.ExtraBold)
                                 }
-                                Text("Seu universo em cada tela.", fontSize = 11.sp, color = Muted)
                             }
                         }
                         Spacer(Modifier.height(10.dp))
                         Text(when(page) {
-                            "Início" -> "Seu universo em cada tela."
+                            "Início" -> "Descubra filmes e séries"
                             "Buscar" -> "Encontre sua próxima história."
                             "Minha lista" -> "Sua coleção, do seu jeito."
                             "Estatísticas" -> "Seu perfil de espectador."
@@ -256,8 +260,8 @@ class MainActivity : ComponentActivity() {
                                 OutlinedButton(onClick = {
                                     val json = JSONArray()
                                     all.forEach { m -> json.put(JSONObject().put("title", m.title).put("tmdbId", m.tmdbId).put("mediaType", m.mediaType).put("year", m.year).put("posterPath", m.posterPath).put("overview", m.overview).put("status", m.status).put("rating", m.rating).put("watchedAt", m.watchedAt).put("runtimeMinutes", m.runtimeMinutes).put("genres", m.genres).put("totalSeasons", m.totalSeasons).put("watchedEpisodes", m.watchedEpisodes).put("totalEpisodes", m.totalEpisodes).put("releaseDate", m.releaseDate)) }
-                                    val send = Intent(Intent.ACTION_SEND).apply { type = "application/json"; putExtra(Intent.EXTRA_SUBJECT, "Backup CineVerse"); putExtra(Intent.EXTRA_TEXT, json.toString(2)) }
-                                    startActivity(Intent.createChooser(send, "Exportar backup CineVerse"))
+                                    val send = Intent(Intent.ACTION_SEND).apply { type = "application/json"; putExtra(Intent.EXTRA_SUBJECT, "Backup CineVerso"); putExtra(Intent.EXTRA_TEXT, json.toString(2)) }
+                                    startActivity(Intent.createChooser(send, "Exportar backup CineVerso"))
                                 }, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup JSON") }
                                 Text("O backup contém os dados da coleção. Guarde o arquivo em local seguro.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                                 Spacer(Modifier.weight(1f))
@@ -363,7 +367,7 @@ private fun RecommendationCard(item: TmdbResult, onAdd: () -> Unit) {
             AsyncImage(model = "https://image.tmdb.org/t/p/w342" + item.posterPath, contentDescription = item.title, modifier = Modifier.fillMaxWidth().height(166.dp))
         } else {
             Box(Modifier.fillMaxWidth().height(166.dp).background(Panel, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                Text("CineVerse", color = Purple, fontSize = 12.sp)
+                Text("CineVerso", color = Purple, fontSize = 12.sp)
             }
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
