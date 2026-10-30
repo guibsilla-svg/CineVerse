@@ -175,7 +175,7 @@ class MainActivity : ComponentActivity() {
                     dao.update(movie.copy(status = "WATCHLIST"))
                 }
             }
-            LaunchedEffect(apiKey) {
+            LaunchedEffect(apiKey, all, favorites) {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
                     recommendationsError = ""
@@ -191,8 +191,20 @@ class MainActivity : ComponentActivity() {
                         if (trending.isNotEmpty()) trending else TmdbClient.popularShows(apiKey).filter { it.posterPath != null }
                     }
 
-                    recommendedMovies = movieResult.getOrDefault(emptyList()).take(12)
-                    recommendedShows = showResult.getOrDefault(emptyList()).take(12)
+                    val tasteProfile = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
+                    fun personalized(items: List<TmdbResult>, mediaType: String): List<TmdbResult> {
+                        val profile = tasteProfile.filter { it.mediaType == mediaType }
+                        if (profile.isEmpty()) return items.take(12)
+                        val tokens = profile.flatMap { (it.title + " " + it.overview + " " + it.genres).lowercase().split(Regex("[^\\p{L}\\p{N}]+")) }
+                            .filter { it.length >= 4 }.groupingBy { it }.eachCount()
+                        return items.sortedByDescending { candidate ->
+                            val text = (candidate.title + " " + candidate.overview).lowercase()
+                            tokens.entries.sumOf { (word, weight) -> if (text.contains(word)) weight * 2 else 0 } +
+                                if (profile.any { it.title.equals(candidate.title, ignoreCase = true) }) -100 else 0
+                        }.take(12)
+                    }
+                    recommendedMovies = personalized(movieResult.getOrDefault(emptyList()), "movie")
+                    recommendedShows = personalized(showResult.getOrDefault(emptyList()), "tv")
 
                     val errors = listOfNotNull(
                         movieResult.exceptionOrNull()?.message?.let { "Filmes: $it" },
