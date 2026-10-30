@@ -115,8 +115,7 @@ class MainActivity : ComponentActivity() {
                 }
                 if (release != null) { updateVersion = release.first; updateApkUrl = release.second }
             }
-            var paletteName by remember { mutableStateOf(prefs.getString("palette", "Roxo") ?: "Roxo") }
-            val palette = cinePalette(paletteName)
+            val palette = cinePalette("Roxo")
             var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
             var featuredTitle by remember { mutableStateOf(prefs.getString("featured_title", "") ?: "") }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
@@ -531,7 +530,7 @@ class MainActivity : ComponentActivity() {
                                                     },
                                                     modifier = Modifier.fillMaxWidth(),
                                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
-                                                ) { Text("NA MINHA LISTA • REMOVER") }
+                                                ) { Text("NA MINHA LISTA • REMOVER", color = Color.White, fontWeight = FontWeight.Bold) }
                                             } else {
                                                 Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                                 (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
@@ -568,21 +567,21 @@ class MainActivity : ComponentActivity() {
                                                         val episodeList = season.optJSONArray("episodeList") ?: JSONArray()
                                                         val watchedInSeason = (0 until episodeList.length()).count { episodeList.optJSONObject(it)?.optBoolean("watched", false) == true }
                                                         val seasonLabel = when (seasonStatus) { "WATCHED" -> "JÁ ASSISTIDA"; "WATCHING" -> "EM ANDAMENTO"; else -> "QUERO ASSISTIR" }
-                                                        val seasonAccent = if (seasonStatus == "WATCHLIST") Muted else Color(0xFFC29AFF)
-                                                        val seasonBackground = if (seasonStatus == "WATCHLIST") Panel else Color(0xFF2A2040)
+                                                        val seasonAccent = Color.White
+                                                        val seasonBackground = when (seasonStatus) { "WATCHING" -> Color(0xFF35105F); "WATCHED" -> Color(0xFF24143A); else -> Panel }
                                                         Column(Modifier.fillMaxWidth().background(seasonBackground, RoundedCornerShape(12.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                                 Column(Modifier.weight(1f).clickable { seasonExpanded = !seasonExpanded }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                                     Text(season.optString("name"), color = TextMain, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                                    Text("${watchedInSeason}/${episodeList.length()} episódios • ${season.optString("airDate")}", color = Muted, fontSize = 11.sp)
+                                                                    Text("${watchedInSeason}/${episodeList.length()} episódios • ${season.optString("airDate")}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                                     Text(seasonLabel, color = seasonAccent, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp)
                                                                 }
-                                                                TextButton(onClick = { seasonExpanded = !seasonExpanded }) { Text(if (seasonExpanded) "Recolher" else "Episódios") }
+                                                                TextButton(onClick = { seasonExpanded = !seasonExpanded }) { Text(if (seasonExpanded) "Recolher" else "Episódios", color = Color.White, fontWeight = FontWeight.Bold) }
                                                                 Box {
-                                                                    TextButton(onClick = { seasonMenu = true }) { Text("Status") }
+                                                                    TextButton(onClick = { seasonMenu = true }) { Text("Status", color = Color.White, fontWeight = FontWeight.Bold) }
                                                                     DropdownMenu(expanded = seasonMenu, onDismissRequest = { seasonMenu = false }) {
                                                                         listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (newStatus, label) ->
-                                                                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                            DropdownMenuItem(text = { Text(label, color = Color.White, fontWeight = FontWeight.Bold) }, onClick = {
                                                                                 if (newStatus == "WATCHED") {
                                                                                     for (j in 0 until episodeList.length()) episodeList.optJSONObject(j)?.put("watched", true)
                                                                                 }
@@ -605,7 +604,7 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                             if (seasonExpanded) {
-                                                                if (episodeList.length() == 0) Text("Lista de episódios indisponível.", color = Muted, fontSize = 11.sp)
+                                                                if (episodeList.length() == 0) Text("Lista de episódios indisponível.", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                                 for (j in 0 until episodeList.length()) {
                                                                     val episode = episodeList.optJSONObject(j) ?: continue
                                                                     val watched = episode.optBoolean("watched", false)
@@ -627,8 +626,8 @@ class MainActivity : ComponentActivity() {
                                                                             }
                                                                         })
                                                                         Column(Modifier.weight(1f)) {
-                                                                            Text("E${episode.optInt("number")} • ${episode.optString("name")}", color = TextMain, fontSize = 12.sp)
-                                                                            if (episode.optString("airDate").isNotBlank()) Text(episode.optString("airDate"), color = Muted, fontSize = 10.sp)
+                                                                            Text("E${episode.optInt("number")} • ${episode.optString("name")}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                                            if (episode.optString("airDate").isNotBlank()) Text(episode.optString("airDate"), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                                         }
                                                                     }
                                                                 }
@@ -811,13 +810,6 @@ class MainActivity : ComponentActivity() {
                             }
                             "Config." -> {
                                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("PERSONALIZAÇÃO VISUAL", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text("Escolha a identidade de cores do CineVerso.", color = Muted, fontSize = 12.sp)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf("Roxo", "Azul", "Rubi", "Esmeralda", "Dourado").forEach { option ->
-                                        FilterChip(selected = paletteName == option, onClick = { paletteName = option; prefs.edit().putString("palette", option).apply() }, label = { Text(option, fontSize = 10.sp) })
-                                    }
-                                }
                                 Text("DESTAQUE DA PÁGINA INICIAL", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("Escolha um título da sua coleção para destacar.", color = Muted, fontSize = 12.sp)
                                 var featuredMenu by remember { mutableStateOf(false) }
@@ -1298,7 +1290,7 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
 private fun ListToggleButton(inList: Boolean, onClick: () -> Unit) {
     if (inList) {
         OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(32.dp), contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC29AFF))) {
-            Text("NA MINHA LISTA", fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text("NA MINHA LISTA", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
     } else {
         OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(32.dp), contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) {
@@ -1324,7 +1316,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
         }
         Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
-        TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color(0xFFFF8A8A), fontSize = 10.sp) }
+        TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
     }
 }
 
