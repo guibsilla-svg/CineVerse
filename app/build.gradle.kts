@@ -12,9 +12,23 @@ android {
         applicationId = "br.com.cineverse"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = providers.gradleProperty("appVersionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("appVersionName").orNull ?: "1.0.0"
         buildConfigField("String", "TMDB_API_KEY", "\"ed317a1df951109bde5285a44be90bd9\"")
+    }
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("CINEVERSE_KEYSTORE_FILE") ?: "release.keystore")
+            storePassword = System.getenv("CINEVERSE_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("CINEVERSE_KEY_ALIAS") ?: "cineverse"
+            keyPassword = System.getenv("CINEVERSE_KEY_PASSWORD") ?: ""
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
     buildFeatures {
         compose = true

@@ -1,4 +1,4 @@
-name: Android Build
+name: Android Build and Release
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -23,11 +23,38 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
-      - name: Upload APK
+      - name: Prepare signing key
+        env:
+          CINEVERSE_KEYSTORE_BASE64: ${{ secrets.CINEVERSE_KEYSTORE_BASE64 }}
+          CINEVERSE_STORE_PASSWORD: ${{ secrets.CINEVERSE_STORE_PASSWORD }}
+          CINEVERSE_KEY_ALIAS: ${{ secrets.CINEVERSE_KEY_ALIAS }}
+          CINEVERSE_KEY_PASSWORD: ${{ secrets.CINEVERSE_KEY_PASSWORD }}
+        run: |
+          test -n "$CINEVERSE_KEYSTORE_BASE64" || (echo "Missing GitHub secret CINEVERSE_KEYSTORE_BASE64" && exit 1)
+          test -n "$CINEVERSE_STORE_PASSWORD" || (echo "Missing GitHub secret CINEVERSE_STORE_PASSWORD" && exit 1)
+          echo "$CINEVERSE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/cineverse-release.keystore"
+          echo "CINEVERSE_KEYSTORE_FILE=$RUNNER_TEMP/cineverse-release.keystore" >> "$GITHUB_ENV"
+          echo "CINEVERSE_STORE_PASSWORD=$CINEVERSE_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "CINEVERSE_KEY_ALIAS=$CINEVERSE_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "CINEVERSE_KEY_PASSWORD=$CINEVERSE_KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Set version
+        run: |
+          echo "APP_VERSION_CODE=$((10000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "APP_VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - name: Build signed APK
+        run: gradle --no-daemon assembleRelease -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME"
+      - name: Prepare release APK
+        run: cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/cineverse.apk
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION_NAME }}
+          name: CineVerso ${{ env.APP_VERSION_NAME }}
+          generate_release_notes: true
+          files: app/build/outputs/apk/release/cineverse.apk
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cineverse-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: cineverse-release-apk
+          path: app/build/outputs/apk/release/cineverse.apk
           if-no-files-found: error
