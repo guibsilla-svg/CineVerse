@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -46,6 +48,12 @@ import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -71,7 +79,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val dao = AppDatabase.get(this).mediaDao()
         val prefs = getSharedPreferences("cineverse_settings", MODE_PRIVATE)
+        val alertWork = PeriodicWorkRequestBuilder<EpisodeAlertWorker>(12, TimeUnit.HOURS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork("cineverse_episode_alerts", ExistingPeriodicWorkPolicy.KEEP, alertWork)
         setContent {
+            val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
             var updateVersion by remember { mutableStateOf<String?>(null) }
             var updateApkUrl by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(Unit) {
@@ -687,7 +700,9 @@ class MainActivity : ComponentActivity() {
                                     startActivity(Intent.createChooser(send, "Exportar backup CineVerso"))
                                 }, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup JSON") }
                                 Text("O backup contém os dados da coleção. Guarde o arquivo em local seguro.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                                Text("Notificações de estreias e episódios: integração ainda pendente.", color = Muted, fontSize = 11.sp)
+                                Text("ALERTAS DE EPISÓDIOS", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("O CineVerso verifica a cada 12 horas os próximos episódios das séries marcadas como Tô assistindo. Os avisos são enviados para episódios com data prevista para hoje ou nos próximos dois dias. As datas dependem das informações disponíveis no TMDB.", color = Muted, fontSize = 12.sp)
+                                OutlinedButton(onClick = { if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.fillMaxWidth()) { Text("Ativar permissão de notificações") }
                                 }
                             }
                             else -> {
