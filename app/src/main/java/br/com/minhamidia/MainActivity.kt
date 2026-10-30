@@ -237,6 +237,33 @@ class MainActivity : ComponentActivity() {
                                             onProgress = { delta -> lifecycleScope.launch { dao.update(media.copy(watchedEpisodes = (media.watchedEpisodes + delta).coerceIn(0, if (media.totalEpisodes > 0) media.totalEpisodes else 9999))) } },
                                             onEditProgress = { editingSeries = media; seasonInput = media.totalSeasons.toString(); totalEpisodesInput = media.totalEpisodes.toString(); watchedEpisodesInput = media.watchedEpisodes.toString() },
                                             onDelete = { lifecycleScope.launch { dao.delete(media) } })
+                                        if (sortMode == "Manual") {
+                                            val position = visible.indexOfFirst { it.id == media.id }
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                                TextButton(enabled = position > 0, onClick = {
+                                                    lifecycleScope.launch {
+                                                        val ordered = all.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id }).toMutableList()
+                                                        val a = ordered.indexOfFirst { it.id == media.id }
+                                                        val b = ordered.indexOfFirst { it.id == visible[position - 1].id }
+                                                        if (a >= 0 && b >= 0) {
+                                                            val temp = ordered[a]; ordered[a] = ordered[b]; ordered[b] = temp
+                                                            ordered.forEachIndexed { i, item -> dao.update(item.copy(sortOrder = i.toLong() + 1L)) }
+                                                        }
+                                                    }
+                                                }) { Text("↑ Subir") }
+                                                TextButton(enabled = position < visible.lastIndex, onClick = {
+                                                    lifecycleScope.launch {
+                                                        val ordered = all.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id }).toMutableList()
+                                                        val a = ordered.indexOfFirst { it.id == media.id }
+                                                        val b = ordered.indexOfFirst { it.id == visible[position + 1].id }
+                                                        if (a >= 0 && b >= 0) {
+                                                            val temp = ordered[a]; ordered[a] = ordered[b]; ordered[b] = temp
+                                                            ordered.forEachIndexed { i, item -> dao.update(item.copy(sortOrder = i.toLong() + 1L)) }
+                                                        }
+                                                    }
+                                                }) { Text("↓ Descer") }
+                                            }
+                                        }
                                     }
                                 }
                             }
