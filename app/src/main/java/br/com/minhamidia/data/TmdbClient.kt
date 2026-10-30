@@ -47,6 +47,42 @@ object TmdbClient {
     suspend fun popularShows(credential: String): List<TmdbResult> =
         request("/tv/popular", credential, mapOf("language" to "pt-BR"))
 
+
+    suspend fun seriesSeasons(id: Int, credential: String): String =
+        requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
+            .optJSONArray("seasons")?.let { seasons ->
+                org.json.JSONArray().apply {
+                    for (i in 0 until seasons.length()) {
+                        val season = seasons.optJSONObject(i) ?: continue
+                        put(org.json.JSONObject()
+                            .put("number", season.optInt("season_number"))
+                            .put("name", season.optString("name"))
+                            .put("episodes", season.optInt("episode_count"))
+                            .put("airDate", season.optString("air_date"))
+                            .put("status", if (season.optInt("season_number") == 0) "SPECIAL" else "WATCHLIST"))
+                    }
+                }.toString()
+            } ?: "[]"
+
+    private suspend fun requestObject(path: String, credential: String, parameters: Map<String, String>): JSONObject =
+        withContext(Dispatchers.IO) {
+            require(credential.isNotBlank()) { "Configure seu token de acesso do TMDB nas configurações." }
+            val bearer = credential.trim().count { it == '.' } == 2
+            val query = parameters.entries.joinToString("&") { "${URLEncoder.encode(it.key, "UTF-8")}=${URLEncoder.encode(it.value, "UTF-8")}" }
+            val auth = if (bearer) "" else "&api_key=" + URLEncoder.encode(credential.trim(), "UTF-8")
+            val connection = (URL("https://api.themoviedb.org/3$path?$query$auth").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 15000; readTimeout = 15000
+                setRequestProperty("Accept", "application/json")
+                if (bearer) setRequestProperty("Authorization", "Bearer ${credential.trim()}")
+            }
+            try {
+                val code = connection.responseCode
+                val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) throw IllegalStateException("Não foi possível importar as temporadas do TMDB ($code).")
+                JSONObject(body)
+            } finally { connection.disconnect() }
+        }
+
     private suspend fun request(
         path: String,
         credential: String,
