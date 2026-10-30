@@ -620,14 +620,14 @@ class MainActivity : ComponentActivity() {
                         onDismissRequest = { if (!rouletteSpinning) showRouletteDialog = false },
                         title = {
                             Text(
-                                if (rouletteSuggestion != null) "A roleta escolheu!" else "O que você quer assistir?",
+                                if (rouletteSuggestion != null && !rouletteSpinning) "A roleta escolheu!" else "O que você quer assistir?",
                                 color = TextMain,
                                 fontWeight = FontWeight.ExtraBold
                             )
                         },
                         text = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (rouletteSuggestion != null) {
+                                if (rouletteSuggestion != null && !rouletteSpinning) {
                                     val picked = rouletteSuggestion!!
                                     if (!picked.posterPath.isNullOrBlank()) {
                                         AsyncImage(
@@ -662,7 +662,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         confirmButton = {
-                            if (rouletteSuggestion != null) {
+                            if (rouletteSuggestion != null && !rouletteSpinning) {
                                 TextButton(onClick = {
                                     val picked = rouletteSuggestion!!
                                     detailItem = picked
@@ -702,7 +702,7 @@ class MainActivity : ComponentActivity() {
                                 if (!rouletteSpinning) {
                                     if (rouletteSuggestion != null) rouletteSuggestion = null else showRouletteDialog = false
                                 }
-                            }) { Text(if (rouletteSuggestion != null) "Sortear novamente" else "Fechar") }
+                            }) { Text(if (rouletteSuggestion != null && !rouletteSpinning) "Sortear novamente" else "Fechar") }
                         },
                         containerColor = Panel
                     )
