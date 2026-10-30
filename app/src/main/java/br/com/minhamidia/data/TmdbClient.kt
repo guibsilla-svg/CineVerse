@@ -103,6 +103,9 @@ object TmdbClient {
         return TmdbTrailer(selected.optString("key"), selected.optString("name"), selected.optString("iso_639_1"))
     }
 
+    suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
+        requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
+
     suspend fun seriesSeasons(id: Int, credential: String): String =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
             .optJSONArray("seasons")?.let { seasons ->
