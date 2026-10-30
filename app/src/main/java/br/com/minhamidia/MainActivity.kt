@@ -935,29 +935,47 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         Text("Gênero: não aplicado à coleção pessoal.", color = Muted, fontSize = 10.sp)
                                     }
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("▼", color = Color(0xFFFFD27A), fontSize = 25.sp, fontWeight = FontWeight.Black)
-                                        LazyRow(
-                                            modifier = Modifier.fillMaxWidth().height(190.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            contentPadding = PaddingValues(horizontal = 30.dp)
+                                    val wheelItems = (if (rouletteMode == "LIST") options else rouletteCarouselItems).take(8)
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(278.dp)) {
+                                        Text("▼", color = Color(0xFFFFD27A), fontSize = 25.sp, fontWeight = FontWeight.Black,
+                                            modifier = Modifier.align(Alignment.TopCenter))
+                                        Box(
+                                            modifier = Modifier.size(250.dp).graphicsLayer {
+                                                rotationZ = rouletteWheelRotation.value
+                                            },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            val carouselItems = if (rouletteMode == "LIST") options else rouletteCarouselItems
-                                            items(carouselItems.take(12), key = { "wheel-${it.type}-${it.id}" }) { poster ->
+                                            Box(Modifier.size(92.dp).background(Color(0xFF302044), RoundedCornerShape(50)).padding(8.dp),
+                                                contentAlignment = Alignment.Center) {
+                                                Text("CINE\nVERSE", color = Color(0xFFFFD27A), fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Black, lineHeight = 15.sp)
+                                            }
+                                            wheelItems.forEachIndexed { index, poster ->
+                                                val angle = (index * (360f / maxOf(wheelItems.size, 1)) - 90f) * (Math.PI / 180.0)
+                                                val dx = (78.0 * kotlin.math.cos(angle)).toFloat()
+                                                val dy = (78.0 * kotlin.math.sin(angle)).toFloat()
                                                 Column(
-                                                    Modifier.width(104.dp).graphicsLayer {
-                                                        rotationY = if (poster.id % 2 == 0) 13f else -13f
-                                                        cameraDistance = 12 * density
-                                                    },
+                                                    modifier = Modifier.offset(x = dx.dp, y = dy.dp).width(66.dp)
+                                                        .background(Color(0xFF211A2D), RoundedCornerShape(7.dp)).padding(3.dp),
                                                     horizontalAlignment = Alignment.CenterHorizontally
                                                 ) {
-                                                    AsyncImage(model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = poster.title, modifier = Modifier.fillMaxWidth().height(148.dp).background(Color(0xFF14263A), RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
-                                                    Text(poster.title, color = Color(0xFFFFD27A), fontSize = 9.sp, maxLines = 1)
+                                                    AsyncImage(
+                                                        model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w185$it" },
+                                                        contentDescription = poster.title,
+                                                        modifier = Modifier.fillMaxWidth().height(88.dp)
+                                                            .background(Color(0xFF14263A), RoundedCornerShape(5.dp)),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                    Text(poster.title, color = Color(0xFFFFD27A), fontSize = 7.sp,
+                                                        maxLines = 1)
                                                 }
                                             }
                                         }
-                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) { repeat(9) { Box(Modifier.size(7.dp).background(Color(0xFFFFD27A), RoundedCornerShape(50))) } }
+                                        if (wheelItems.isEmpty()) Text(
+                                            if (rouletteMode == "LIST") "Adicione filmes ou séries à sua lista" else "A roleta está pronta para girar",
+                                            color = Muted, fontSize = 11.sp,
+                                            modifier = Modifier.align(Alignment.BottomCenter)
+                                        )
                                     }
                                     Text(if (rouletteSpinning) "A sorte está sendo lançada..." else "Toque em GIRAR e deixe a roleta decidir!", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     if (rouletteError.isNotBlank()) Text(rouletteError, color = Color(0xFFFF8A8A), fontSize = 11.sp)
@@ -985,21 +1003,19 @@ class MainActivity : ComponentActivity() {
                                     rouletteSuggestion = null
                                     rouletteScope.launch {
                                         try {
-                                            val pool: List<TmdbResult> = if (rouletteMode == "LIST") options else {
-                                                var found: List<TmdbResult> = emptyList()
-                                                repeat(5) {
-                                                    if (found.isEmpty()) {
-                                                        found = TmdbClient.discoverRandom(rouletteType, selectedGenreId, rouletteYear.takeIf { it != "Todos" }, apiKey)
-                                                            .filter { candidate -> all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id } }
-                                                    }
-                                                }
-                                                found
-                                            }
-                                            rouletteCarouselItems = pool.shuffled().take(12)
                                             rouletteWheelRotation.animateTo(
-                                                rouletteWheelRotation.value + 1800f + (360..900).random(),
-                                                animationSpec = tween(durationMillis = 5200, easing = FastOutSlowInEasing)
+                                                rouletteWheelRotation.value + 1440f + (360..720).random(),
+                                                animationSpec = tween(durationMillis = 3200, easing = FastOutSlowInEasing)
                                             )
+                                            val pool: List<TmdbResult> = if (rouletteMode == "LIST") options else {
+                                                TmdbClient.discoverRandom(
+                                                    rouletteType, selectedGenreId,
+                                                    rouletteYear.takeIf { it != "Todos" }, apiKey
+                                                ).filter { candidate ->
+                                                    all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id }
+                                                }
+                                            }
+                                            rouletteCarouselItems = pool.shuffled().take(8)
                                             if (pool.isEmpty()) {
                                                 rouletteError = "Não encontrei títulos com esse filtro. Tente outro gênero."
                                             } else {
