@@ -196,7 +196,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             "Detalhes" -> {
-                                val item = detailItem
+                                val selectedTitle = detailItem
                                 if (item != null) {
                                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                                         item {
@@ -205,12 +205,12 @@ class MainActivity : ComponentActivity() {
                                                 Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                                                if (!item.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w342${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(112.dp).height(166.dp))
+                                                if (!selectedTitle.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w342${selectedTitle.posterPath}", contentDescription = selectedTitle.title, modifier = Modifier.width(112.dp).height(166.dp))
                                                 Column(Modifier.weight(1f)) {
-                                                    Text(item.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                                                    Text("${if (item.type == "tv") "Série" else "Filme"} • ${item.year}", color = Muted)
+                                                    Text(selectedTitle.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                                    Text("${if (selectedTitle.type == "tv") "Série" else "Filme"} • ${selectedTitle.year}", color = Muted)
                                                     Spacer(Modifier.height(8.dp))
-                                                    Text(item.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
+                                                    Text(selectedTitle.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
@@ -218,10 +218,10 @@ class MainActivity : ComponentActivity() {
                                             listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (status, label) ->
                                                 Button(onClick = {
                                                     lifecycleScope.launch {
-                                                        val existing = dao.findByTmdbId(item.id, item.type)
-                                                        var media = existing ?: item.toMediaItem()
-                                                        if (item.type == "tv" && media.seasonProgress.isBlank() && apiKey.isNotBlank()) {
-                                                            val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                        val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                        var media = existing ?: selectedTitle.toMediaItem()
+                                                        if (selectedTitle.type == "tv" && media.seasonProgress.isBlank() && apiKey.isNotBlank()) {
+                                                            val imported = runCatching { TmdbClient.seriesSeasons(selectedTitle.id, apiKey) }.getOrDefault("[]")
                                                             val seasons = JSONArray(imported)
                                                             var episodes = 0
                                                             for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0
@@ -232,7 +232,7 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                                             }
-                                            if (item.type == "tv") {
+                                            if (selectedTitle.type == "tv") {
                                                 Spacer(Modifier.height(8.dp))
                                                 Text("TEMPORADAS", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                                 if (detailLoading) CircularProgressIndicator()
@@ -259,8 +259,8 @@ class MainActivity : ComponentActivity() {
                                                                         detailSeasons = seasons.toString()
                                                                         seasonMenu = false
                                                                         lifecycleScope.launch {
-                                                                            val existing = dao.findByTmdbId(item.id, item.type)
-                                                                            val current = existing ?: item.toMediaItem()
+                                                                            val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                                            val current = existing ?: selectedTitle.toMediaItem()
                                                                             val imported = JSONArray(detailSeasons)
                                                                             val count = (0 until imported.length()).count { (imported.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
                                                                             val episodes = (0 until imported.length()).sumOf { imported.optJSONObject(it)?.optInt("episodes", 0) ?: 0 }
