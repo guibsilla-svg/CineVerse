@@ -865,6 +865,15 @@ class MainActivity : ComponentActivity() {
                                         FilterChip(selected = rouletteType == "movie", onClick = { rouletteType = "movie"; rouletteGenre = "Todos"; rouletteSuggestion = null; rouletteCarouselItems = emptyList() }, enabled = !rouletteSpinning, label = { Text("Filme") })
                                         FilterChip(selected = rouletteType == "tv", onClick = { rouletteType = "tv"; rouletteGenre = "Todos"; rouletteSuggestion = null; rouletteCarouselItems = emptyList() }, enabled = !rouletteSpinning, label = { Text("Série") })
                                     }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Box(Modifier.weight(1f)) {
+                                            OutlinedButton(onClick = { rouletteYearMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !rouletteSpinning) { Text("Ano: $rouletteYear") }
+                                            DropdownMenu(expanded = rouletteYearMenu, onDismissRequest = { rouletteYearMenu = false }) {
+                                                val yearValues = if (rouletteMode == "LIST") all.filter { it.mediaType == rouletteType }.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending().map { it.toString() } else (java.time.Year.now().value downTo 1950).map { it.toString() }
+                                                (listOf("Todos") + yearValues).forEach { year -> DropdownMenuItem(text = { Text(year) }, onClick = { rouletteYear = year; rouletteSuggestion = null; rouletteYearMenu = false }) }
+                                            }
+                                        }
+                                    }
                                     if (rouletteMode == "DISCOVER") {
                                         Box {
                                             OutlinedButton(onClick = { rouletteGenreMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !rouletteSpinning) {
