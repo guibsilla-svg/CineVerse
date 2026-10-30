@@ -242,7 +242,34 @@ class MainActivity : ComponentActivity() {
                                                     for (i in 0 until seasons.length()) {
                                                         val season = seasons.optJSONObject(i) ?: continue
                                                         if (season.optInt("number") == 0) continue
-                                                        Text("${season.optString("name")} • ${season.optInt("episodes")} episódios • ${season.optString("airDate")}", color = Muted, fontSize = 12.sp)
+                                                        var seasonMenu by remember(season.optInt("number")) { mutableStateOf(false) }
+                                                        val seasonStatus = season.optString("status", "WATCHLIST")
+                                                        val seasonLabel = when (seasonStatus) { "WATCHED" -> "Já assisti"; "WATCHING" -> "Tô assistindo"; else -> "Quero assistir" }
+                                                        Box(Modifier.fillMaxWidth()) {
+                                                            OutlinedButton(onClick = { seasonMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                                                                Column(Modifier.fillMaxWidth()) {
+                                                                    Text(season.optString("name"), color = TextMain, fontWeight = FontWeight.SemiBold)
+                                                                    Text("${season.optInt("episodes")} episódios • ${season.optString("airDate")} • $seasonLabel", color = Muted, fontSize = 11.sp)
+                                                                }
+                                                            }
+                                                            DropdownMenu(expanded = seasonMenu, onDismissRequest = { seasonMenu = false }) {
+                                                                listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (newStatus, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        season.put("status", newStatus)
+                                                                        detailSeasons = seasons.toString()
+                                                                        seasonMenu = false
+                                                                        lifecycleScope.launch {
+                                                                            val existing = dao.findByTmdbId(item.id, item.type)
+                                                                            val current = existing ?: item.toMediaItem()
+                                                                            val imported = JSONArray(detailSeasons)
+                                                                            val count = (0 until imported.length()).count { (imported.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
+                                                                            val episodes = (0 until imported.length()).sumOf { imported.optJSONObject(it)?.optInt("episodes", 0) ?: 0 }
+                                                                            dao.insert(current.copy(totalSeasons = count, totalEpisodes = episodes, seasonProgress = detailSeasons))
+                                                                        }
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
