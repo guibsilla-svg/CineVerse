@@ -18,6 +18,8 @@ interface MediaDao {
     fun observeType(type: String): Flow<List<MediaItem>>
     @Query("SELECT * FROM media WHERE mediaType = 'tv' AND status = 'WATCHING' AND tmdbId IS NOT NULL")
     suspend fun getTrackedShows(): List<MediaItem>
+    @Query("SELECT * FROM media WHERE mediaType = 'movie' AND status = 'WATCHLIST' AND tmdbId IS NOT NULL")
+    suspend fun getWatchlistMovies(): List<MediaItem>
     @Query("SELECT COUNT(*) FROM media")
     suspend fun count(): Int
     @Query("SELECT * FROM media WHERE tmdbId = :tmdbId AND mediaType = :type LIMIT 1")
