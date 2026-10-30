@@ -27,6 +27,8 @@ data class TmdbResult(
     )
 }
 
+data class TmdbTrailer(val key: String, val name: String, val language: String)
+
 object TmdbClient {
     suspend fun search(query: String, credential: String): List<TmdbResult> =
         request("/search/multi", credential, mapOf(
@@ -47,6 +49,22 @@ object TmdbClient {
     suspend fun popularShows(credential: String): List<TmdbResult> =
         request("/tv/popular", credential, mapOf("language" to "pt-BR"))
 
+
+    suspend fun trailer(id: Int, type: String, credential: String): TmdbTrailer? {
+        val endpoint = if (type == "tv") "tv" else "movie"
+        val videos = requestObject("/$endpoint/$id/videos", credential, mapOf(
+            "language" to "pt-BR",
+            "include_video_language" to "pt-BR,en,null"
+        )).optJSONArray("results") ?: return null
+        val candidates = (0 until videos.length()).mapNotNull { videos.optJSONObject(it) }
+            .filter { it.optString("site") == "YouTube" && it.optString("key").isNotBlank() && it.optString("type") == "Trailer" }
+        val selected = candidates.sortedWith(
+            compareByDescending<JSONObject> { it.optBoolean("official") }
+                .thenBy { when (it.optString("iso_639_1")) { "pt" -> 0; "en" -> 1; else -> 2 } }
+                .thenByDescending { it.optString("published_at") }
+        ).firstOrNull() ?: return null
+        return TmdbTrailer(selected.optString("key"), selected.optString("name"), selected.optString("iso_639_1"))
+    }
 
     suspend fun seriesSeasons(id: Int, credential: String): String =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
