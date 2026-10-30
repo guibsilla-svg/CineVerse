@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -106,7 +107,21 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = Night) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         Spacer(Modifier.height(18.dp))
-                        Text("C I N E V E R S E", fontSize = 13.sp, color = Purple, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(id = R.drawable.cineverse_logo),
+                                contentDescription = "Logo oficial CineVerse",
+                                modifier = Modifier.size(54.dp)
+                            )
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Cine", fontSize = 25.sp, color = TextMain, fontWeight = FontWeight.ExtraBold)
+                                    Text("Verse", fontSize = 25.sp, color = Purple, fontWeight = FontWeight.ExtraBold)
+                                }
+                                Text("Seu universo em cada tela.", fontSize = 11.sp, color = Muted)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
                         Text(when(page) {
                             "Início" -> "Seu universo em cada tela."
                             "Buscar" -> "Encontre sua próxima história."
