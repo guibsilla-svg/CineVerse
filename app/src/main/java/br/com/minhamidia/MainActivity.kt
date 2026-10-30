@@ -284,10 +284,9 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme(primary = palette.third, background = palette.first, surface = palette.second, onBackground = TextMain, onSurface = TextMain)) {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = palette.first) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-                        Row(
+                        Box(
                             Modifier.fillMaxWidth().height(56.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            contentAlignment = Alignment.Center
                         ) {
                             androidx.compose.foundation.Image(
                                 painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
@@ -307,7 +306,8 @@ class MainActivity : ComponentActivity() {
                                     "Roleta" -> "ROLETA"
                                     else -> "CONFIGURAÇÕES"
                                 },
-                                color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
                             )
                         }
                         when (page) {
@@ -468,7 +468,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     },
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15352D), contentColor = Color(0xFF65D6A2))
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
                                                 ) { Text("NA MINHA LISTA • REMOVER") }
                                             } else {
                                                 Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -503,12 +503,12 @@ class MainActivity : ComponentActivity() {
                                                         val seasonStatus = season.optString("status", "WATCHLIST")
                                                         val seasonLabel = when (seasonStatus) { "WATCHED" -> "JÁ ASSISTIDA"; "WATCHING" -> "EM ANDAMENTO"; else -> "QUERO ASSISTIR" }
                                                         val seasonAccent = when (seasonStatus) {
-                                                            "WATCHED" -> Color(0xFF65D6A2)
+                                                            "WATCHED" -> Color(0xFFC29AFF)
                                                             "WATCHING" -> Color(0xFFC29AFF)
                                                             else -> Muted
                                                         }
                                                         val seasonBackground = when (seasonStatus) {
-                                                            "WATCHED" -> Color(0xFF15352D)
+                                                            "WATCHED" -> Color(0xFF2A2040)
                                                             "WATCHING" -> Color(0xFF2A2040)
                                                             else -> Panel
                                                         }
@@ -1124,7 +1124,7 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
 @Composable
 private fun ListToggleButton(inList: Boolean, onClick: () -> Unit) {
     if (inList) {
-        OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(32.dp), contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF65D6A2))) {
+        OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(32.dp), contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC29AFF))) {
             Text("NA MINHA LISTA", fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
     } else {
