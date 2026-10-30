@@ -148,6 +148,9 @@ class MainActivity : ComponentActivity() {
             var rouletteSpinning by remember { mutableStateOf(false) }
             var rouletteGenre by remember { mutableStateOf("Todos") }
             var rouletteGenreMenu by remember { mutableStateOf(false) }
+            var rouletteYear by remember { mutableStateOf("Todos") }
+            var rouletteYearMenu by remember { mutableStateOf(false) }
+            var rouletteCarouselItems by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var rouletteError by remember { mutableStateOf("") }
             var exploreType by remember { mutableStateOf("movie") }
             var exploreCategory by remember { mutableStateOf("trending") }
@@ -819,7 +822,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 if (showRouletteDialog) {
-                    val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null }
+                    val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null && (rouletteYear == "Todos" || it.year == rouletteYear) }
                         .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate) }
                     val options = if (rouletteMode == "LIST") collectionOptions else emptyList()
                     val genreOptions = if (rouletteType == "movie") listOf(
@@ -929,7 +932,7 @@ class MainActivity : ComponentActivity() {
                                                 var found: List<TmdbResult> = emptyList()
                                                 repeat(5) {
                                                     if (found.isEmpty()) {
-                                                        found = TmdbClient.discoverRandom(rouletteType, selectedGenreId, apiKey)
+                                                        found = TmdbClient.discoverRandom(rouletteType, selectedGenreId, rouletteYear.takeIf { it != "Todos" }, apiKey)
                                                             .filter { candidate -> all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id } }
                                                     }
                                                 }
