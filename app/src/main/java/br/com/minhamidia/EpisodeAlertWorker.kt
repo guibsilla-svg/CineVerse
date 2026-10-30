@@ -31,8 +31,8 @@ class EpisodeAlertWorker(context: Context, params: WorkerParameters) : Coroutine
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "cineverse_episodes"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(NotificationChannel(channelId, "Novos episódios", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Avisos sobre episódios de séries acompanhadas"
+            manager.createNotificationChannel(NotificationChannel(channelId, "Estreias e episódios", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Avisos sobre episódios e estreias dos títulos acompanhados"
             })
         }
 
@@ -64,6 +64,27 @@ class EpisodeAlertWorker(context: Context, params: WorkerParameters) : Coroutine
                     .build()
                 NotificationManagerCompat.from(applicationContext).notify(tmdbId, notification)
                 prefs.edit().putBoolean(episodeKey, true).apply()
+            }
+            val movies = AppDatabase.get(applicationContext).mediaDao().getWatchlistMovies()
+            for (movie in movies) {
+                val tmdbId = movie.tmdbId ?: continue
+                val details = TmdbClient.movieReleaseInfo(tmdbId, credential)
+                val dateText = details.optString("release_date")
+                val releaseDate = runCatching { LocalDate.parse(dateText) }.getOrNull() ?: continue
+                if (releaseDate.isBefore(today) || releaseDate.isAfter(today.plusDays(7))) continue
+                val releaseKey = "movie_release_alert_${tmdbId}_${dateText}"
+                if (prefs.getBoolean(releaseKey, false)) continue
+
+                val notification = NotificationCompat.Builder(applicationContext, channelId)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Estreia de filme próxima")
+                    .setContentText("${movie.title} • estreia prevista para $dateText")
+                    .setStyle(NotificationCompat.BigTextStyle().bigText("${movie.title} tem estreia prevista para $dateText."))
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setAutoCancel(true)
+                    .build()
+                NotificationManagerCompat.from(applicationContext).notify(tmdbId + 100000000, notification)
+                prefs.edit().putBoolean(releaseKey, true).apply()
             }
             Result.success()
         } catch (_: SecurityException) {
