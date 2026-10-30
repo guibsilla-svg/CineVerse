@@ -51,6 +51,26 @@ object TmdbClient {
 
 
 
+    suspend fun catalog(type: String, category: String, page: Int, genreId: Int?, credential: String): List<TmdbResult> {
+        val mediaType = if (type == "tv") "tv" else "movie"
+        val endpoint = when (category) {
+            "popular" -> "/$mediaType/popular"
+            "top_rated" -> "/$mediaType/top_rated"
+            "recent" -> if (mediaType == "tv") "/tv/airing_today" else "/movie/now_playing"
+            "upcoming" -> if (mediaType == "tv") "/tv/on_the_air" else "/movie/upcoming"
+            else -> "/trending/$mediaType/week"
+        }
+        val params = mutableMapOf("language" to "pt-BR", "page" to page.coerceIn(1, 500).toString())
+        if (genreId != null) {
+            params["with_genres"] = genreId.toString()
+            params["sort_by"] = if (category == "top_rated") "vote_average.desc" else "popularity.desc"
+            params["vote_count.gte"] = "20"
+            params["include_adult"] = "false"
+            return request("/discover/$mediaType", credential, params)
+        }
+        return request(endpoint, credential, params)
+    }
+
     suspend fun discoverRandom(type: String, genreId: Int?, credential: String): List<TmdbResult> {
         val endpoint = if (type == "tv") "/discover/tv" else "/discover/movie"
         val base = mutableMapOf(

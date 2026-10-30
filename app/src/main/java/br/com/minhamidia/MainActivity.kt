@@ -97,6 +97,14 @@ class MainActivity : ComponentActivity() {
             var rouletteGenre by remember { mutableStateOf("Todos") }
             var rouletteGenreMenu by remember { mutableStateOf(false) }
             var rouletteError by remember { mutableStateOf("") }
+            var exploreType by remember { mutableStateOf("movie") }
+            var exploreCategory by remember { mutableStateOf("trending") }
+            var exploreGenre by remember { mutableStateOf("Todos") }
+            var explorePage by remember { mutableStateOf(1) }
+            var exploreResults by remember { mutableStateOf(emptyList<TmdbResult>()) }
+            var exploreLoading by remember { mutableStateOf(false) }
+            var exploreError by remember { mutableStateOf("") }
+            var exploreCanLoadMore by remember { mutableStateOf(true) }
             val rouletteWheelRotation = remember { Animatable(0f) }
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
             LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
@@ -165,6 +173,23 @@ class MainActivity : ComponentActivity() {
                     recommendationsLoading = false
                 }
             }
+            LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey) {
+                if (page == "Explorar") {
+                    explorePage = 1
+                    exploreResults = emptyList()
+                    exploreError = ""
+                    exploreCanLoadMore = true
+                    if (apiKey.isBlank()) exploreError = "Configure sua credencial TMDB em Mais > Config."
+                    else {
+                        exploreLoading = true
+                        val genreId = if (exploreGenre == "Todos") null else exploreGenres(exploreType).firstOrNull { it.first == exploreGenre }?.second
+                        runCatching { TmdbClient.catalog(exploreType, exploreCategory, 1, genreId, apiKey).filter { it.posterPath != null } }
+                            .onSuccess { items -> exploreResults = items; exploreCanLoadMore = items.size >= 20 }
+                            .onFailure { exploreError = it.message ?: "Não foi possível carregar o catálogo." }
+                        exploreLoading = false
+                    }
+                }
+            }
             val availableYears = all.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending()
             val visibleUnsorted = all.filter { media ->
                 val categoryMatches = when (categoryFilter) {
@@ -216,8 +241,8 @@ class MainActivity : ComponentActivity() {
                         }, fontSize = 23.sp, color = TextMain, fontWeight = FontWeight.ExtraBold)
                         Text("FILMES  •  SÉRIES  •  SUA COLEÇÃO", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
                         Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("Início", "Buscar", "Minha lista").forEach { tab ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                            listOf("Início", "Explorar", "Buscar", "Minha lista").forEach { tab ->
                                 FilterChip(selected = page == tab, onClick = { navigateTo(tab) }, label = { Text(tab, fontSize = 11.sp) })
                             }
                             Box {
@@ -232,6 +257,56 @@ class MainActivity : ComponentActivity() {
                         }
                         Spacer(Modifier.height(12.dp))
                         when (page) {
+                            "Explorar" -> {
+                                Column(Modifier.weight(1f)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        FilterChip(selected = exploreType == "movie", onClick = { exploreType = "movie" }, label = { Text("Filmes") })
+                                        FilterChip(selected = exploreType == "tv", onClick = { exploreType = "tv" }, label = { Text("Séries") })
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("DESCUBRA MAIS", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
+                                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf("Em alta" to "trending", "Populares" to "popular", "Mais bem avaliados" to "top_rated", "Recentes" to "recent", "Em breve" to "upcoming").forEach { (label, value) ->
+                                            FilterChip(selected = exploreCategory == value, onClick = { exploreCategory = value }, label = { Text(label, fontSize = 11.sp) })
+                                        }
+                                    }
+                                    var exploreGenreMenu by remember { mutableStateOf(false) }
+                                    Box {
+                                        OutlinedButton(onClick = { exploreGenreMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Gênero: $exploreGenre  ▾") }
+                                        DropdownMenu(expanded = exploreGenreMenu, onDismissRequest = { exploreGenreMenu = false }) {
+                                            exploreGenres(exploreType).forEach { (name, _) -> DropdownMenuItem(text = { Text(name) }, onClick = { exploreGenre = name; exploreGenreMenu = false }) }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(when (exploreCategory) { "trending" -> "Em alta nesta semana"; "popular" -> "Os títulos mais populares"; "top_rated" -> "Os mais bem avaliados"; "recent" -> if (exploreType == "movie") "Em cartaz" else "Exibidos hoje"; else -> if (exploreType == "movie") "Próximos lançamentos" else "No ar" }, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    if (exploreLoading && exploreResults.isEmpty()) {
+                                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Purple) }
+                                    } else if (exploreError.isNotBlank() && exploreResults.isEmpty()) {
+                                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(exploreError, color = Muted) }
+                                    } else {
+                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                            items(exploreResults, key = { "explore-${it.type}-${it.id}" }) { item ->
+                                                val alreadySaved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
+                                                Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    AsyncImage(model = "https://image.tmdb.org/t/p/w185${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(66.dp).height(96.dp), contentScale = ContentScale.Crop)
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Text(item.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2)
+                                                        Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 11.sp)
+                                                        if (item.overview.isNotBlank()) Text(item.overview, color = Muted, fontSize = 10.sp, maxLines = 3)
+                                                        TextButton(onClick = { detailItem = item; detailReturnPage = "Explorar"; navigateTo("Detalhes"); if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch { detailLoading = true; detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]"); detailLoading = false } }, contentPadding = PaddingValues(0.dp)) { Text("Ver detalhes", color = Purple, fontSize = 11.sp) }
+                                                        Button(onClick = { lifecycleScope.launch { if (dao.findByTmdbId(item.id, item.type) == null) { var saved = item.toMediaItem(); if (item.type == "tv" && apiKey.isNotBlank()) { val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]"); val seasons = JSONArray(imported); var episodes = 0; for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0; saved = saved.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported) }; dao.insert(saved) } } }, enabled = !alreadySaved, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp)) { Text(if (alreadySaved) "Na minha lista" else "+ Minha lista", fontSize = 10.sp) }
+                                                    }
+                                                }
+                                            }
+                                            if (exploreCanLoadMore) item {
+                                                OutlinedButton(onClick = { if (!exploreLoading) lifecycleScope.launch { exploreLoading = true; val nextPage = explorePage + 1; val genreId = if (exploreGenre == "Todos") null else exploreGenres(exploreType).firstOrNull { it.first == exploreGenre }?.second; runCatching { TmdbClient.catalog(exploreType, exploreCategory, nextPage, genreId, apiKey).filter { it.posterPath != null } }.onSuccess { items -> val newItems = items.filter { candidate -> exploreResults.none { it.id == candidate.id && it.type == candidate.type } }; exploreResults = exploreResults + newItems; explorePage = nextPage; exploreCanLoadMore = items.size >= 20 }.onFailure { exploreError = it.message ?: "Falha ao carregar mais títulos." }; exploreLoading = false } }, modifier = Modifier.fillMaxWidth(), enabled = !exploreLoading) { if (exploreLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Carregar mais títulos") }
+                                            }
+                                            if (exploreError.isNotBlank()) item { Text(exploreError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
+                                        }
+                                    }
+                                }
+                            }
                             "Buscar" -> {
                                 OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Nome do filme ou série") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true, shape = RoundedCornerShape(15.dp))
                                 Spacer(Modifier.height(8.dp))
@@ -776,6 +851,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
+private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == "tv") listOf(
+    "Todos" to null, "Ação e aventura" to 10759, "Animação" to 16, "Comédia" to 35, "Crime" to 80,
+    "Documentário" to 99, "Drama" to 18, "Família" to 10751, "Infantil" to 10762, "Mistério" to 9648,
+    "Ficção científica e fantasia" to 10765, "Novela" to 10766, "Reality" to 10764, "Guerra e política" to 10768
+) else listOf(
+    "Todos" to null, "Ação" to 28, "Aventura" to 12, "Animação" to 16, "Comédia" to 35, "Crime" to 80,
+    "Documentário" to 99, "Drama" to 18, "Família" to 10751, "Fantasia" to 14, "História" to 36,
+    "Terror" to 27, "Mistério" to 9648, "Romance" to 10749, "Ficção científica" to 878, "Suspense" to 53
+)
 
 @Composable
 private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, onOpen: () -> Unit) {
