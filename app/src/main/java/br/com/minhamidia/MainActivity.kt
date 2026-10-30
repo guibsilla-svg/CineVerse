@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
             var sortMode by remember { mutableStateOf("Manual") }
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
+            var detailReturnPage by remember { mutableStateOf("Buscar") }
             var detailSeasons by remember { mutableStateOf("[]") }
             var detailLoading by remember { mutableStateOf(false) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
@@ -101,18 +102,12 @@ class MainActivity : ComponentActivity() {
             }
             val availableYears = all.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending()
             val visibleUnsorted = all.filter { media ->
-                val statusMatches = when (filter) {
-                    "Quero assistir" -> media.status == "WATCHLIST"
-                    "Tô assistindo" -> media.status == "WATCHING"
-                    "Já assisti" -> media.status == "WATCHED"
-                    else -> false
-                }
                 val categoryMatches = when (categoryFilter) {
                     "FILMES" -> media.mediaType == "movie"
                     "SÉRIES" -> media.mediaType == "tv"
                     else -> true
                 }
-                statusMatches && (yearFilter == "Todos" || media.year == yearFilter) && categoryMatches
+                (yearFilter == "Todos" || media.year == yearFilter) && categoryMatches
             }
             val visible = when (sortMode) {
                 "A–Z" -> visibleUnsorted.sortedBy { it.title.lowercase(java.util.Locale.ROOT) }
@@ -201,7 +196,7 @@ class MainActivity : ComponentActivity() {
                                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                                         item {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                TextButton(onClick = { page = "Buscar" }) { Text("← Voltar") }
+                                                TextButton(onClick = { page = detailReturnPage }) { Text("← Voltar") }
                                                 Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
@@ -278,11 +273,6 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             "Minha lista" -> {
-                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
-                                    listOf("Quero assistir", "Tô assistindo", "Já assisti").forEach { item ->
-                                        FilterChip(selected = filter == item, onClick = { filter = item }, label = { Text(item, fontSize = 10.sp) })
-                                    }
-                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                                     Text("Categoria:", color = Muted, fontSize = 12.sp)
                                     listOf("FILMES", "SÉRIES").forEach { item -> FilterChip(selected = categoryFilter == item, onClick = { categoryFilter = item; yearFilter = "Todos" }, label = { Text(item, fontSize = 11.sp) }) }
@@ -307,48 +297,39 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                                Text("${visible.size} títulos • No modo Manual, use ↑ e ↓ para agrupar franquias.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
-                                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                                    items(visible, key = { it.id }) { media ->
-                                        MediaCard(media, favorites.contains(media.id.toString()),
-                                            showStatusActions = false,
-                                            onFavorite = {
-                                                val next = favorites.toMutableSet()
-                                                if (!next.add(media.id.toString())) next.remove(media.id.toString())
-                                                favorites = next
-                                                prefs.edit().putStringSet("favorites", next).apply()
-                                            },
-                                            onStatus = { status -> lifecycleScope.launch { dao.update(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt)) } },
-                                            
-                                            onProgress = { delta -> lifecycleScope.launch { dao.update(media.copy(watchedEpisodes = (media.watchedEpisodes + delta).coerceIn(0, if (media.totalEpisodes > 0) media.totalEpisodes else 9999))) } },
-                                            onEditProgress = { editingSeries = media; seasonInput = media.totalSeasons.toString(); totalEpisodesInput = media.totalEpisodes.toString(); watchedEpisodesInput = media.watchedEpisodes.toString() },
-                                            onDelete = { lifecycleScope.launch { dao.delete(media) } })
-                                        if (sortMode == "Manual") {
-                                            val position = visible.indexOfFirst { it.id == media.id }
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                                TextButton(enabled = position > 0, onClick = {
-                                                    lifecycleScope.launch {
-                                                        val ordered = all.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id }).toMutableList()
-                                                        val a = ordered.indexOfFirst { it.id == media.id }
-                                                        val b = ordered.indexOfFirst { it.id == visible[position - 1].id }
-                                                        if (a >= 0 && b >= 0) {
-                                                            val temp = ordered[a]; ordered[a] = ordered[b]; ordered[b] = temp
-                                                            ordered.forEachIndexed { i, item -> dao.update(item.copy(sortOrder = i.toLong() + 1L)) }
+                                Text("${visible.size} títulos • Toque em um banner para ver os detalhes.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                    items(visible.chunked(3), key = { row -> row.firstOrNull()?.id ?: 0L }) { rowItems ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                            rowItems.forEach { media ->
+                                                CompactMediaCard(media, Modifier.weight(1f)) {
+                                                    detailItem = TmdbResult(media.tmdbId, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
+                                                    detailReturnPage = "Minha lista"
+                                                    detailSeasons = media.seasonProgress.ifBlank { "[]" }
+                                                    page = "Detalhes"
+                                                    if (media.mediaType == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
+                                                        detailLoading = true
+                                                        val imported = runCatching { TmdbClient.seriesSeasons(media.tmdbId, apiKey) }.getOrDefault("[]")
+                                                        val saved = runCatching { JSONArray(media.seasonProgress) }.getOrNull()
+                                                        val fresh = JSONArray(imported)
+                                                        if (saved != null) {
+                                                            for (i in 0 until fresh.length()) {
+                                                                val season = fresh.optJSONObject(i) ?: continue
+                                                                for (j in 0 until saved.length()) {
+                                                                    val oldSeason = saved.optJSONObject(j) ?: continue
+                                                                    if (oldSeason.optInt("number") == season.optInt("number")) {
+                                                                        season.put("status", oldSeason.optString("status", "WATCHLIST"))
+                                                                        break
+                                                                    }
+                                                                }
+                                                            }
                                                         }
+                                                        detailSeasons = fresh.toString()
+                                                        detailLoading = false
                                                     }
-                                                }) { Text("↑ Subir") }
-                                                TextButton(enabled = position < visible.lastIndex, onClick = {
-                                                    lifecycleScope.launch {
-                                                        val ordered = all.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id }).toMutableList()
-                                                        val a = ordered.indexOfFirst { it.id == media.id }
-                                                        val b = ordered.indexOfFirst { it.id == visible[position + 1].id }
-                                                        if (a >= 0 && b >= 0) {
-                                                            val temp = ordered[a]; ordered[a] = ordered[b]; ordered[b] = temp
-                                                            ordered.forEachIndexed { i, item -> dao.update(item.copy(sortOrder = i.toLong() + 1L)) }
-                                                        }
-                                                    }
-                                                }) { Text("↓ Descer") }
+                                                }
                                             }
+                                            repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                                         }
                                     }
                                 }
@@ -511,6 +492,26 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
+@Composable
+private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (!media.posterPath.isNullOrBlank()) {
+            AsyncImage(
+                model = "https://image.tmdb.org/t/p/w342${media.posterPath}",
+                contentDescription = media.title,
+                modifier = Modifier.fillMaxWidth().height(150.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+        } else {
+            Box(Modifier.fillMaxWidth().height(150.dp).background(Panel, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                Text("CineVerso", color = Purple, fontSize = 11.sp)
+            }
+        }
+        Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
+        Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
+    }
+}
 
 @Composable
 private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
