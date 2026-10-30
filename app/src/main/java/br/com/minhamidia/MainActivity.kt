@@ -342,7 +342,13 @@ class MainActivity : ComponentActivity() {
                                             items(exploreResults.chunked(3), key = { row -> "explore-" + (row.firstOrNull()?.id ?: 0) }) { rowItems ->
                                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                                     rowItems.forEach { item ->
-                                                        ExploreMediaCard(item, Modifier.weight(1f)) {
+                                                        val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
+                                                        ExploreMediaCard(item, Modifier.weight(1f), inList = saved, onToggleList = {
+                                                            lifecycleScope.launch {
+                                                                val current = dao.findByTmdbId(item.id, item.type)
+                                                                if (current != null) dao.delete(current) else dao.insert(item.toMediaItem())
+                                                            }
+                                                        }) {
                                                             detailItem = item
                                                             detailReturnPage = "Explorar"
                                                             navigateTo("Detalhes")
@@ -381,7 +387,13 @@ class MainActivity : ComponentActivity() {
                                 Text(message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                     items(results, key = { "${it.type}-${it.id}" }) { item ->
-                                        SearchCard(item, onOpen = {
+                                        val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
+                                        SearchCard(item, inList = saved, onToggleList = {
+                                            lifecycleScope.launch {
+                                                val current = dao.findByTmdbId(item.id, item.type)
+                                                if (current != null) dao.delete(current) else dao.insert(item.toMediaItem())
+                                            }
+                                        }, onOpen = {
                                             detailItem = item
                                             navigateTo("Detalhes")
                                             if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
@@ -770,7 +782,12 @@ class MainActivity : ComponentActivity() {
                                 if (recommendedMovies.isNotEmpty()) {
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         items(recommendedMovies, key = { "movie-" + it.id }) { item ->
-                                            RecommendationCard(item) {
+                                            RecommendationCard(item, inList = all.any { it.tmdbId == item.id && it.mediaType == item.type }, onToggleList = {
+                                                lifecycleScope.launch {
+                                                    val current = dao.findByTmdbId(item.id, item.type)
+                                                    if (current != null) dao.delete(current) else dao.insert(item.toMediaItem())
+                                                }
+                                            }) {
                                                 detailItem = item
                                                 navigateTo("Detalhes")
                                                 if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
@@ -814,6 +831,7 @@ class MainActivity : ComponentActivity() {
                             containerColor = Panel,
                             tonalElevation = 0.dp
                         ) {
+                            var moreMenu by remember { mutableStateOf(false) }
                             listOf("Início", "Explorar", "Buscar", "Minha lista").forEach { destination ->
                                 NavigationBarItem(
                                     selected = page == destination,
@@ -834,7 +852,6 @@ class MainActivity : ComponentActivity() {
                                     alwaysShowLabel = true
                                 )
                             }
-                            var moreMenu by remember { mutableStateOf(false) }
                             Box {
                                 NavigationBarItem(
                                     selected = page in listOf("Estatísticas", "Calendário", "Config."),
@@ -1072,7 +1089,7 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
 
 
 @Composable
-private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, inList: Boolean = false, onToggleList: () -> Unit = {}, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!item.posterPath.isNullOrBlank()) {
             AsyncImage(
@@ -1088,8 +1105,22 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
+        ListToggleButton(inList, onToggleList)
     }
 }
+@Composable
+private fun ListToggleButton(inList: Boolean, onClick: () -> Unit) {
+    if (inList) {
+        OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(32.dp), contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF65D6A2))) {
+            Text("NA MINHA LISTA", fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    } else {
+        OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(32.dp), contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)) {
+            Text("+ MINHA LISTA", fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
+
 @Composable
 private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, onRemove: () -> Unit, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1112,7 +1143,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
 }
 
 @Composable
-private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
+private fun RecommendationCard(item: TmdbResult, inList: Boolean = false, onToggleList: () -> Unit = {}, onOpen: () -> Unit) {
     Column(Modifier.width(116.dp).clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!item.posterPath.isNullOrBlank()) {
             AsyncImage(model = "https://image.tmdb.org/t/p/w342" + item.posterPath, contentDescription = item.title, modifier = Modifier.fillMaxWidth().height(166.dp))
@@ -1122,12 +1153,13 @@ private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
             }
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
-        Text((item.year.ifBlank { "Em alta" }) + " • + Minha lista", color = Muted, fontSize = 10.sp)
+        Text(item.year.ifBlank { "Em alta" }, color = Muted, fontSize = 10.sp)
+        ListToggleButton(inList, onToggleList)
     }
 }
 
 @Composable
-private fun SearchCard(item: TmdbResult, onOpen: () -> Unit) {
+private fun SearchCard(item: TmdbResult, inList: Boolean = false, onToggleList: () -> Unit = {}, onOpen: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).clickable(onClick = onOpen).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         if (!item.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w185${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(58.dp).height(84.dp))
         Spacer(Modifier.width(10.dp))
@@ -1136,7 +1168,10 @@ private fun SearchCard(item: TmdbResult, onOpen: () -> Unit) {
             Text("${if (item.type == "tv") "Série" else "Filme"} • ${item.year.ifBlank { "Ano indisponível" }}", color = Muted, fontSize = 12.sp)
             if (item.overview.isNotBlank()) Text(item.overview, color = Muted, fontSize = 11.sp, maxLines = 3)
         }
-        Text("Detalhes", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Column(horizontalAlignment = Alignment.End) {
+            Text("Detalhes", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            ListToggleButton(inList, onToggleList)
+        }
     }
 }
 
