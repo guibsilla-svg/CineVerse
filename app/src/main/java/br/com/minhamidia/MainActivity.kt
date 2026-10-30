@@ -883,6 +883,38 @@ class MainActivity : ComponentActivity() {
                         "Guerra e política" to 10768, "Western" to 37
                     )
                     val selectedGenreId = genreOptions.firstOrNull { it.first == rouletteGenre }?.second
+                    fun startRoulette() {
+                        if (rouletteSpinning || (rouletteMode == "LIST" && options.isEmpty())) return
+                        rouletteSpinning = true
+                        rouletteError = ""
+                        rouletteSuggestion = null
+                        rouletteScope.launch {
+                            try {
+                                val pool: List<TmdbResult> = if (rouletteMode == "LIST") options else {
+                                    TmdbClient.discoverRandom(
+                                        rouletteType, selectedGenreId,
+                                        rouletteYear.takeIf { it != "Todos" }, apiKey
+                                    ).filter { candidate ->
+                                        all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id }
+                                    }
+                                }
+                                rouletteCarouselItems = pool.shuffled().take(8)
+                                rouletteWheelRotation.animateTo(
+                                    rouletteWheelRotation.value + 1440f + (360..720).random(),
+                                    animationSpec = tween(durationMillis = 3800, easing = FastOutSlowInEasing)
+                                )
+                                if (pool.isEmpty()) {
+                                    rouletteError = "Não encontrei títulos com esse filtro. Tente outro gênero."
+                                } else {
+                                    rouletteSuggestion = pool.random()
+                                }
+                            } catch (error: Exception) {
+                                rouletteError = error.message ?: "Não foi possível consultar o catálogo. Confira sua conexão e a chave TMDB."
+                            } finally {
+                                rouletteSpinning = false
+                            }
+                        }
+                    }
                     AlertDialog(
                         onDismissRequest = { if (!rouletteSpinning) showRouletteDialog = false },
                         title = { Text(if (rouletteSuggestion != null && !rouletteSpinning) "A roleta escolheu!" else "Roleta CineVerso", color = TextMain, fontWeight = FontWeight.ExtraBold) },
@@ -976,20 +1008,23 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 }
                                             }
-                                            Box(Modifier.size(112.dp).background(Color(0xFF130E1B), RoundedCornerShape(56.dp))
-                                                .padding(5.dp).background(Color(0xFF302044), RoundedCornerShape(56.dp)),
-                                                contentAlignment = Alignment.Center) {
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Text("CINE", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                                                    Text("VERSE", color = Color(0xFFD7B5FF), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
-                                                    Spacer(Modifier.height(4.dp))
-                                                    Box(Modifier.width(34.dp).height(2.dp).background(Purple, RoundedCornerShape(2.dp)))
-                                                }
+                                            Box(
+                                                Modifier.size(112.dp)
+                                                    .background(Color(0xFF130E1B), RoundedCornerShape(56.dp))
+                                                    .padding(5.dp)
+                                                    .background(Color(0xFF302044), RoundedCornerShape(56.dp))
+                                                    .clickable(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty())) {
+                                                        startRoulette()
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                androidx.compose.foundation.Image(
+                                                    painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
+                                                    contentDescription = "Girar roleta CineVerso",
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 9.dp).height(42.dp)
+                                                )
                                             }
-                                        }
-                                        Box(Modifier.align(Alignment.TopCenter).size(42.dp).background(Color(0xFFFFD27A), RoundedCornerShape(12.dp)),
-                                            contentAlignment = Alignment.Center) {
-                                            Text("▼", color = Color(0xFF21152D), fontSize = 23.sp, fontWeight = FontWeight.Black)
                                         }
                                         if (wheelItems.isEmpty()) Text(
                                             if (rouletteMode == "LIST") "Adicione títulos à sua lista" else "Gire para descobrir um título",
@@ -1018,35 +1053,7 @@ class MainActivity : ComponentActivity() {
                                 }) { Text("Ver detalhes") }
                             } else {
                                 TextButton(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty()), onClick = {
-                                    rouletteSpinning = true
-                                    rouletteError = ""
-                                    rouletteSuggestion = null
-                                    rouletteScope.launch {
-                                        try {
-                                            val pool: List<TmdbResult> = if (rouletteMode == "LIST") options else {
-                                                TmdbClient.discoverRandom(
-                                                    rouletteType, selectedGenreId,
-                                                    rouletteYear.takeIf { it != "Todos" }, apiKey
-                                                ).filter { candidate ->
-                                                    all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id }
-                                                }
-                                            }
-                                            rouletteCarouselItems = pool.shuffled().take(8)
-                                            rouletteWheelRotation.animateTo(
-                                                rouletteWheelRotation.value + 1440f + (360..720).random(),
-                                                animationSpec = tween(durationMillis = 3800, easing = FastOutSlowInEasing)
-                                            )
-                                            if (pool.isEmpty()) {
-                                                rouletteError = "Não encontrei títulos com esse filtro. Tente outro gênero."
-                                            } else {
-                                                rouletteSuggestion = pool.random()
-                                            }
-                                        } catch (error: Exception) {
-                                            rouletteError = error.message ?: "Não foi possível consultar o catálogo. Confira sua conexão e a chave TMDB."
-                                        } finally {
-                                            rouletteSpinning = false
-                                        }
-                                    }
+                                    startRoulette()
                                 }) { Text(if (rouletteSpinning) "Girando..." else "GIRAR A ROLETA") }
                             }
                         },
