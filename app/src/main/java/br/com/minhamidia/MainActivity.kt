@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -520,6 +522,7 @@ class MainActivity : ComponentActivity() {
                                 Spacer(Modifier.weight(1f))
                             }
                             else -> {
+                                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                                 Text("Continue de onde parou ou descubra algo novo.", color = Muted, fontSize = 13.sp)
                                 Spacer(Modifier.height(14.dp))
                                 Row(
@@ -600,8 +603,8 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Text("ADICIONADOS RECENTEMENTE", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
                                 if (all.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Sua coleção está vazia. Pesquise um filme ou série para começar.", color = Muted) }
-                                else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 104.dp)) {
-                                    items(all.takeLast(12).reversed(), key = { it.id }) { media ->
+                                else Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                    all.takeLast(12).reversed().forEach { media ->
                                         MediaCard(media, favorites.contains(media.id.toString()),
                                             onFavorite = { val next = favorites.toMutableSet(); if (!next.add(media.id.toString())) next.remove(media.id.toString()); favorites = next; prefs.edit().putStringSet("favorites", next).apply() },
                                             onStatus = { status -> lifecycleScope.launch { dao.update(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt)) } },
@@ -610,6 +613,7 @@ class MainActivity : ComponentActivity() {
                                             onEditProgress = { editingSeries = media; seasonInput = media.totalSeasons.toString(); totalEpisodesInput = media.totalEpisodes.toString(); watchedEpisodesInput = media.watchedEpisodes.toString() },
                                             onDelete = { lifecycleScope.launch { dao.delete(media) } })
                                     }
+                                }
                                 }
                             }
                         }
