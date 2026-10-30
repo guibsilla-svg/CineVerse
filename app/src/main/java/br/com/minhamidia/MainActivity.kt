@@ -12,6 +12,13 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.consume
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -280,6 +287,29 @@ class MainActivity : ComponentActivity() {
                 "Inclusão (mais recente)" -> visibleUnsorted.sortedByDescending { it.id }
                 "Inclusão (mais antiga)" -> visibleUnsorted.sortedBy { it.id }
                 else -> visibleUnsorted.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id })
+            }
+            val posterBounds = remember { mutableStateMapOf<Long, Rect>() }
+            var draggedPosterId by remember { mutableStateOf<Long?>(null) }
+            var dragPointer by remember { mutableStateOf(Offset.Zero) }
+            fun moveManualPoster(fromId: Long, toId: Long) {
+                if (fromId == toId || sortMode != "Manual") return
+                val visibleIds = visible.map { it.id }.toSet()
+                val reorderedVisible = visible.toMutableList()
+                val fromIndex = reorderedVisible.indexOfFirst { it.id == fromId }
+                val toIndex = reorderedVisible.indexOfFirst { it.id == toId }
+                if (fromIndex < 0 || toIndex < 0) return
+                val moved = reorderedVisible.removeAt(fromIndex)
+                reorderedVisible.add(toIndex, moved)
+                val completeOrder = all.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id }).toMutableList()
+                var nextVisible = 0
+                for (index in completeOrder.indices) {
+                    if (completeOrder[index].id in visibleIds) {
+                        completeOrder[index] = reorderedVisible[nextVisible++]
+                    }
+                }
+                lifecycleScope.launch {
+                    completeOrder.forEachIndexed { index, item -> dao.update(item.copy(sortOrder = (index + 1L) * 1000L)) }
+                }
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = palette.third, background = palette.first, surface = palette.second, onBackground = TextMain, onSurface = TextMain)) {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = palette.first) {
@@ -583,39 +613,77 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                                Text("${visible.size} títulos • Toque em um banner para ver os detalhes.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
-                                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                                    items(visible.chunked(3), key = { row -> row.firstOrNull()?.id ?: 0L }) { rowItems ->
-                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                            rowItems.forEach { media ->
-                                                CompactMediaCard(media, Modifier.weight(1f), onRemove = { lifecycleScope.launch { dao.delete(media) } }) {
-                                                    detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
-                                                    detailReturnPage = "Minha lista"
-                                                    detailSeasons = media.seasonProgress.ifBlank { "[]" }
-                                                    navigateTo("Detalhes")
-                                                    if (media.mediaType == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
-                                                        detailLoading = true
-                                                        val imported = runCatching { TmdbClient.seriesSeasons(media.tmdbId ?: 0, apiKey) }.getOrDefault("[]")
-                                                        val saved = runCatching { JSONArray(media.seasonProgress) }.getOrNull()
-                                                        val fresh = JSONArray(imported)
-                                                        if (saved != null) {
-                                                            for (i in 0 until fresh.length()) {
-                                                                val season = fresh.optJSONObject(i) ?: continue
-                                                                for (j in 0 until saved.length()) {
-                                                                    val oldSeason = saved.optJSONObject(j) ?: continue
-                                                                    if (oldSeason.optInt("number") == season.optInt("number")) {
-                                                                        season.put("status", oldSeason.optString("status", "WATCHLIST"))
-                                                                        break
-                                                                    }
+                                Text(
+                                    "${visible.size} títulos • Pressione e segure um pôster para reorganizar.",
+                                    color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                                    modifier = Modifier.weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    contentPadding = PaddingValues(bottom = 16.dp)
+                                ) {
+                                    items(visible, key = { it.id }) { media ->
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .onGloballyPositioned { coordinates -> posterBounds[media.id] = coordinates.boundsInRoot() }
+                                                .graphicsLayer {
+                                                    if (draggedPosterId == media.id) {
+                                                        val center = posterBounds[media.id]?.center ?: Offset.Zero
+                                                        translationX = dragPointer.x - center.x
+                                                        translationY = dragPointer.y - center.y
+                                                        shadowElevation = 18f
+                                                    }
+                                                }
+                                                .pointerInput(media.id, sortMode) {
+                                                    if (sortMode == "Manual") {
+                                                        detectDragGesturesAfterLongPress(
+                                                            onDragStart = {
+                                                                draggedPosterId = media.id
+                                                                dragPointer = posterBounds[media.id]?.center ?: it
+                                                            },
+                                                            onDragEnd = { draggedPosterId = null },
+                                                            onDragCancel = { draggedPosterId = null },
+                                                            onDrag = { change, amount ->
+                                                                change.consume()
+                                                                dragPointer += amount
+                                                                val targetId = posterBounds.entries.firstOrNull { entry ->
+                                                                    entry.key != media.id && entry.value.contains(dragPointer)
+                                                                }?.key
+                                                                if (targetId != null) moveManualPoster(media.id, targetId)
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                        ) {
+                                            CompactMediaCard(media, Modifier.fillMaxWidth(), onRemove = { lifecycleScope.launch { dao.delete(media) } }) {
+                                                detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
+                                                detailReturnPage = "Minha lista"
+                                                detailSeasons = media.seasonProgress.ifBlank { "[]" }
+                                                navigateTo("Detalhes")
+                                                if (media.mediaType == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
+                                                    detailLoading = true
+                                                    val imported = runCatching { TmdbClient.seriesSeasons(media.tmdbId ?: 0, apiKey) }.getOrDefault("[]")
+                                                    val saved = runCatching { JSONArray(media.seasonProgress) }.getOrNull()
+                                                    val fresh = JSONArray(imported)
+                                                    if (saved != null) {
+                                                        for (i in 0 until fresh.length()) {
+                                                            val season = fresh.optJSONObject(i) ?: continue
+                                                            for (j in 0 until saved.length()) {
+                                                                val oldSeason = saved.optJSONObject(j) ?: continue
+                                                                if (oldSeason.optInt("number") == season.optInt("number")) {
+                                                                    season.put("status", oldSeason.optString("status", "WATCHLIST"))
+                                                                    break
                                                                 }
                                                             }
                                                         }
-                                                        detailSeasons = fresh.toString()
-                                                        detailLoading = false
                                                     }
+                                                    detailSeasons = fresh.toString()
+                                                    detailLoading = false
                                                 }
                                             }
-                                            repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                                         }
                                     }
                                 }
