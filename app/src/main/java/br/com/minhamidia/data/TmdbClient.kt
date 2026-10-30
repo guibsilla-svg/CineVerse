@@ -160,8 +160,8 @@ object TmdbClient {
                     val item = results.optJSONObject(i) ?: continue
                     val type = item.optString("media_type").let {
                         if (it == "movie" || it == "tv") it
-                        else if (path.contains("/movie/")) "movie"
-                        else if (path.contains("/tv/")) "tv"
+                        else if (path.contains("/movie/") || path.endsWith("/movie")) "movie"
+                        else if (path.contains("/tv/") || path.endsWith("/tv")) "tv"
                         else ""
                     }
                     if (type != "movie" && type != "tv") continue
