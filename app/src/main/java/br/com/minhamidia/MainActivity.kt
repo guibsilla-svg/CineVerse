@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
             var exploreError by remember { mutableStateOf("") }
             var exploreCanLoadMore by remember { mutableStateOf(true) }
             val rouletteWheelRotation = remember { Animatable(0f) }
+            val rouletteScope = rememberCoroutineScope()
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
             LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
                 val selected = detailItem
@@ -783,7 +784,7 @@ class MainActivity : ComponentActivity() {
                                     rouletteSpinning = true
                                     rouletteError = ""
                                     rouletteSuggestion = null
-                                    lifecycleScope.launch {
+                                    rouletteScope.launch {
                                         try {
                                             rouletteWheelRotation.animateTo(
                                                 rouletteWheelRotation.value + 1800f + (360..900).random(),
