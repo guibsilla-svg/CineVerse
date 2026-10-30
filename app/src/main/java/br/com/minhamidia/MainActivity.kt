@@ -283,43 +283,33 @@ class MainActivity : ComponentActivity() {
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = palette.third, background = palette.first, surface = palette.second, onBackground = TextMain, onSurface = TextMain)) {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = palette.first) {
-                    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                        Spacer(Modifier.height(18.dp))
-                        androidx.compose.foundation.Image(
-                            painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
-                            contentDescription = "Logo oficial CineVerso",
-                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(112.dp)
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(when(page) {
-                            "Início" -> "Descubra filmes e séries"
-                            "Buscar" -> "Encontre sua próxima história."
-                            "Minha lista" -> "Sua coleção, do seu jeito."
-                            "Estatísticas" -> "Seu perfil de espectador."
-                            "Calendário" -> "Sua jornada de exibição."
-                            "Roleta" -> "Deixe a escolha com o acaso."
-                            else -> "Preferências do aplicativo."
-                        }, fontSize = 23.sp, color = TextMain, fontWeight = FontWeight.ExtraBold)
-                        Text("FILMES  •  SÉRIES  •  SUA COLEÇÃO", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
-                        Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                            listOf("Início", "Explorar", "Buscar", "Minha lista").forEach { tab ->
-                                FilterChip(selected = page == tab, onClick = { navigateTo(tab) }, label = { Text(tab, fontSize = 11.sp) })
-                            }
-                            Box {
-                                var menu by remember { mutableStateOf(false) }
-                                FilterChip(selected = page in listOf("Estatísticas", "Calendário", "Config."), onClick = { menu = true }, label = { Text("Mais ▾", fontSize = 11.sp) })
-                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    listOf("Estatísticas", "Calendário", "Config.").forEach { item ->
-                                        DropdownMenuItem(text = { Text(item) }, onClick = { navigateTo(item); menu = false })
-                                    }
-                                }
-                            }
+                    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().height(48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
+                                contentDescription = "CineVerso",
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                modifier = Modifier.width(142.dp).height(38.dp)
+                            )
+                            Text(
+                                when (page) {
+                                    "Início" -> "INÍCIO"
+                                    "Explorar" -> "EXPLORAR"
+                                    "Buscar" -> "BUSCAR"
+                                    "Minha lista" -> "MINHA LISTA"
+                                    "Detalhes" -> "DETALHES"
+                                    "Estatísticas" -> "ESTATÍSTICAS"
+                                    "Calendário" -> "CALENDÁRIO"
+                                    "Roleta" -> "ROLETA"
+                                    else -> "CONFIGURAÇÕES"
+                                },
+                                color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp
+                            )
                         }
-                        Spacer(Modifier.height(12.dp))
                         when (page) {
                             "Explorar" -> {
                                 Column(Modifier.weight(1f)) {
@@ -816,6 +806,45 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Spacer(Modifier.height(14.dp))
 
+                                }
+                            }
+                        }
+                        NavigationBar(
+                            modifier = Modifier.fillMaxWidth().height(62.dp),
+                            containerColor = Panel,
+                            tonalElevation = 0.dp
+                        ) {
+                            listOf("Início", "Explorar", "Buscar", "Minha lista").forEach { destination ->
+                                NavigationBarItem(
+                                    selected = page == destination,
+                                    onClick = { navigateTo(destination) },
+                                    icon = {
+                                        Icon(
+                                            imageVector = when (destination) {
+                                                "Início" -> Icons.Default.Home
+                                                "Explorar" -> Icons.Default.Explore
+                                                "Buscar" -> Icons.Default.Search
+                                                else -> Icons.Default.Bookmarks
+                                            },
+                                            contentDescription = destination
+                                        )
+                                    },
+                                    label = { Text(destination, fontSize = 9.sp, maxLines = 1) },
+                                    alwaysShowLabel = true
+                                )
+                            }
+                            var moreMenu by remember { mutableStateOf(false) }
+                            Box {
+                                NavigationBarItem(
+                                    selected = page in listOf("Estatísticas", "Calendário", "Config."),
+                                    onClick = { moreMenu = true },
+                                    icon = { Icon(Icons.Default.MoreHoriz, contentDescription = "Mais") },
+                                    label = { Text("Mais", fontSize = 9.sp) }
+                                )
+                                DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                                    listOf("Estatísticas", "Calendário", "Config.").forEach { destination ->
+                                        DropdownMenuItem(text = { Text(destination) }, onClick = { navigateTo(destination); moreMenu = false })
+                                    }
                                 }
                             }
                         }
