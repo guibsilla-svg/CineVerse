@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -579,7 +580,7 @@ class MainActivity : ComponentActivity() {
                                     items(visible.chunked(3), key = { row -> row.firstOrNull()?.id ?: 0L }) { rowItems ->
                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                             rowItems.forEach { media ->
-                                                CompactMediaCard(media, Modifier.weight(1f)) {
+                                                CompactMediaCard(media, Modifier.weight(1f), onRemove = { lifecycleScope.launch { dao.delete(media) } }) {
                                                     detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
                                                     detailReturnPage = "Minha lista"
                                                     detailSeasons = media.seasonProgress.ifBlank { "[]" }
@@ -703,6 +704,12 @@ class MainActivity : ComponentActivity() {
                                 Text("ALERTAS DE ESTREIAS E EPISÓDIOS", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("O CineVerso verifica a cada 12 horas os próximos episódios das séries marcadas como Tô assistindo e as estreias dos filmes em Quero assistir. Os avisos de episódios cobrem hoje e os próximos dois dias; os de filmes, os próximos sete dias. As datas dependem das informações disponíveis no TMDB.", color = Muted, fontSize = 12.sp)
                                 OutlinedButton(onClick = { if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.fillMaxWidth()) { Text("Ativar permissão de notificações") }
+                                OutlinedButton(onClick = {
+                                    val request = OneTimeWorkRequestBuilder<EpisodeAlertWorker>()
+                                        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                                        .build()
+                                    WorkManager.getInstance(this@MainActivity).enqueue(request)
+                                }, modifier = Modifier.fillMaxWidth()) { Text("Verificar estreias e episódios agora") }
                                 }
                             }
                             else -> {
@@ -1029,7 +1036,7 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
     }
 }
 @Composable
-private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, onRemove: () -> Unit, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!media.posterPath.isNullOrBlank()) {
             AsyncImage(
@@ -1045,6 +1052,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
         }
         Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
+        TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color(0xFFFF8A8A), fontSize = 10.sp) }
     }
 }
 
