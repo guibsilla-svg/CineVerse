@@ -176,7 +176,7 @@ class MainActivity : ComponentActivity() {
                     dao.update(movie.copy(status = "WATCHLIST"))
                 }
             }
-            LaunchedEffect(apiKey, all, favorites) {
+            LaunchedEffect(apiKey, all, favorites, homeOrder) {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
                     recommendationsError = ""
@@ -692,6 +692,31 @@ class MainActivity : ComponentActivity() {
                             }
                             else -> {
                                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                                val featured = all.firstOrNull { it.title == featuredTitle }
+                                if (featured != null) {
+                                    Text("ESCOLHIDO PARA VOCÊ", color = palette.third, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                                    Row(
+                                        Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(18.dp))
+                                            .clickable {
+                                                detailItem = TmdbResult(featured.tmdbId ?: 0, featured.title, featured.mediaType, featured.year, featured.posterPath, featured.overview, featured.releaseDate)
+                                                detailReturnPage = "Início"
+                                                detailSeasons = featured.seasonProgress.ifBlank { "[]" }
+                                                navigateTo("Detalhes")
+                                            }.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (!featured.posterPath.isNullOrBlank()) {
+                                            AsyncImage(model = "https://image.tmdb.org/t/p/w342${featured.posterPath}", contentDescription = featured.title, modifier = Modifier.width(82.dp).height(120.dp), contentScale = ContentScale.Crop)
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(featured.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                            Text("${if (featured.mediaType == "tv") "Série" else "Filme"} • ${featured.year}", color = Muted, fontSize = 12.sp)
+                                            Text("Título selecionado nas configurações", color = palette.third, fontSize = 11.sp)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(14.dp))
+                                }
                                 Text("Continue de onde parou ou descubra algo novo.", color = Muted, fontSize = 13.sp)
                                 Spacer(Modifier.height(14.dp))
                                 Row(
