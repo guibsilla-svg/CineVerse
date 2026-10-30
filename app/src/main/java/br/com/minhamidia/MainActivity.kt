@@ -143,8 +143,8 @@ class MainActivity : ComponentActivity() {
                 else -> visibleUnsorted.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id })
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = Purple, background = Night, surface = Panel, onBackground = TextMain, onSurface = TextMain)) {
-                Surface(Modifier.fillMaxSize(), color = Night) {
-                    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 16.dp)) {
+                Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = Night) {
+                    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         Spacer(Modifier.height(18.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             androidx.compose.foundation.Image(
