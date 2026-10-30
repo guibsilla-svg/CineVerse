@@ -162,6 +162,7 @@ class MainActivity : ComponentActivity() {
             var exploreType by remember { mutableStateOf("movie") }
             var exploreCategory by remember { mutableStateOf("trending") }
             var exploreGenre by remember { mutableStateOf("Todos") }
+            var exploreQuery by remember { mutableStateOf("") }
             var explorePage by remember { mutableStateOf(1) }
             var exploreResults by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var exploreLoading by remember { mutableStateOf(false) }
@@ -249,8 +250,26 @@ class MainActivity : ComponentActivity() {
                     recommendationsLoading = false
                 }
             }
-            LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey) {
-                if (page == "Explorar") {
+            LaunchedEffect(page, exploreQuery, exploreType, apiKey) {
+                if (page == "Explorar" && exploreQuery.trim().isNotEmpty()) {
+                    kotlinx.coroutines.delay(450)
+                    if (apiKey.isBlank()) {
+                        exploreError = "Configure sua credencial TMDB em Mais > Config."
+                        exploreResults = emptyList()
+                    } else {
+                        exploreLoading = true
+                        exploreError = ""
+                        runCatching { TmdbClient.search(exploreQuery.trim(), apiKey).filter { it.type == exploreType && it.posterPath != null } }
+                            .onSuccess { items -> exploreResults = items; exploreCanLoadMore = false; explorePage = 1 }
+                            .onFailure { exploreError = it.message ?: "Não foi possível pesquisar os títulos." }
+                        exploreLoading = false
+                    }
+                } else if (page == "Explorar" && exploreQuery.isBlank()) {
+                    exploreResults = emptyList()
+                }
+            }
+            LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey, exploreQuery) {
+                if (page == "Explorar" && exploreQuery.isBlank()) {
                     explorePage = 1
                     exploreResults = emptyList()
                     exploreError = ""
@@ -348,7 +367,20 @@ class MainActivity : ComponentActivity() {
                                         FilterChip(selected = exploreType == "tv", onClick = { exploreType = "tv" }, label = { Text("Séries") })
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    Text("DESCUBRA MAIS", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
+                                    OutlinedTextField(
+                                        value = exploreQuery,
+                                        onValueChange = { exploreQuery = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        placeholder = { Text("Buscar filmes ou séries pelo título") },
+                                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                        trailingIcon = {
+                                            if (exploreQuery.isNotEmpty()) TextButton(onClick = { exploreQuery = "" }) { Text("Limpar") }
+                                        },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(15.dp)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(if (exploreQuery.isBlank()) "DESCUBRA MAIS" else "RESULTADOS DA BUSCA", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
                                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         listOf("Em alta" to "trending", "Populares" to "popular", "Mais bem avaliados" to "top_rated", "Recentes" to "recent", "Em breve" to "upcoming").forEach { (label, value) ->
                                             FilterChip(selected = exploreCategory == value, onClick = { exploreCategory = value }, label = { Text(label, fontSize = 11.sp) })
