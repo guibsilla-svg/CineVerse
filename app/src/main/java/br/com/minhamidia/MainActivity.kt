@@ -852,13 +852,13 @@ class MainActivity : ComponentActivity() {
                                     alwaysShowLabel = true
                                 )
                             }
+                            NavigationBarItem(
+                                selected = page in listOf("Estatísticas", "Calendário", "Config."),
+                                onClick = { moreMenu = true },
+                                icon = { Text("•••", color = Muted, fontSize = 18.sp) },
+                                label = { Text("Mais", fontSize = 9.sp) }
+                            )
                             Box {
-                                NavigationBarItem(
-                                    selected = page in listOf("Estatísticas", "Calendário", "Config."),
-                                    onClick = { moreMenu = true },
-                                    icon = { Text("•••", color = Muted, fontSize = 18.sp) },
-                                    label = { Text("Mais", fontSize = 9.sp) }
-                                )
                                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                                     listOf("Estatísticas", "Calendário", "Config.").forEach { destination ->
                                         DropdownMenuItem(text = { Text(destination) }, onClick = { navigateTo(destination); moreMenu = false })
