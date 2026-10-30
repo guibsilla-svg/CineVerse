@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
         val dao = AppDatabase.get(this).mediaDao()
         val prefs = getSharedPreferences("cineverse_settings", MODE_PRIVATE)
         setContent {
-            var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "") ?: "") }
+            var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
             var filter by remember { mutableStateOf("Quero assistir") }
