@@ -285,7 +285,7 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = palette.first) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
                         Row(
-                            Modifier.fillMaxWidth().height(48.dp),
+                            Modifier.fillMaxWidth().height(56.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -293,7 +293,7 @@ class MainActivity : ComponentActivity() {
                                 painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
                                 contentDescription = "CineVerso",
                                 contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                                modifier = Modifier.width(142.dp).height(38.dp)
+                                modifier = Modifier.width(210.dp).height(52.dp)
                             )
                             Text(
                                 when (page) {
@@ -343,12 +343,7 @@ class MainActivity : ComponentActivity() {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                                     rowItems.forEach { item ->
                                                         val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
-                                                        ExploreMediaCard(item, Modifier.weight(1f), inList = saved, onToggleList = {
-                                                            lifecycleScope.launch {
-                                                                val current = dao.findByTmdbId(item.id, item.type)
-                                                                if (current != null) dao.delete(current) else dao.insert(item.toMediaItem())
-                                                            }
-                                                        }) {
+                                                        ExploreMediaCard(item, Modifier.weight(1f)) {
                                                             detailItem = item
                                                             detailReturnPage = "Explorar"
                                                             navigateTo("Detalhes")
@@ -388,12 +383,7 @@ class MainActivity : ComponentActivity() {
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                     items(results, key = { "${it.type}-${it.id}" }) { item ->
                                         val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
-                                        SearchCard(item, inList = saved, onToggleList = {
-                                            lifecycleScope.launch {
-                                                val current = dao.findByTmdbId(item.id, item.type)
-                                                if (current != null) dao.delete(current) else dao.insert(item.toMediaItem())
-                                            }
-                                        }, onOpen = {
+                                        SearchCard(item, onOpen = {
                                             detailItem = item
                                             navigateTo("Detalhes")
                                             if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
@@ -757,7 +747,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                     Spacer(Modifier.height(14.dp))
                                 }
-                                Text("Continue de onde parou ou descubra algo novo.", color = Muted, fontSize = 13.sp)
+                                
                                 Spacer(Modifier.height(14.dp))
                                 Row(
                                     Modifier.fillMaxWidth()
@@ -795,12 +785,7 @@ class MainActivity : ComponentActivity() {
                                 if (recommendedMovies.isNotEmpty()) {
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         items(recommendedMovies, key = { "movie-" + it.id }) { item ->
-                                            RecommendationCard(item, inList = all.any { it.tmdbId == item.id && it.mediaType == item.type }, onToggleList = {
-                                                lifecycleScope.launch {
-                                                    val current = dao.findByTmdbId(item.id, item.type)
-                                                    if (current != null) dao.delete(current) else dao.insert(item.toMediaItem())
-                                                }
-                                            }) {
+                                            RecommendationCard(item) {
                                                 detailItem = item
                                                 navigateTo("Detalhes")
                                                 if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
@@ -1182,7 +1167,6 @@ private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
         Text(item.year.ifBlank { "Em alta" }, color = Muted, fontSize = 10.sp)
-        ListToggleButton(inList, onToggleList)
     }
 }
 
