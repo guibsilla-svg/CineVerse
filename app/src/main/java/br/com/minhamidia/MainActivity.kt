@@ -244,19 +244,14 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), color = Night) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         Spacer(Modifier.height(18.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            androidx.compose.foundation.Image(
-                                painter = painterResource(id = R.drawable.cineverse_logo),
-                                contentDescription = "Logo oficial CineVerso",
-                                modifier = Modifier.size(54.dp)
-                            )
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Cine", fontSize = 25.sp, color = TextMain, fontWeight = FontWeight.ExtraBold)
-                                    Text("Verse", fontSize = 25.sp, color = Purple, fontWeight = FontWeight.ExtraBold)
-                                }
-                            }
-                        }
+                        androidx.compose.foundation.Image(
+                            painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
+                            contentDescription = "Logo oficial CineVerso",
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(112.dp)
+                        )
                         Spacer(Modifier.height(10.dp))
                         Text(when(page) {
                             "Início" -> "Descubra filmes e séries"
