@@ -59,6 +59,10 @@ class MainActivity : ComponentActivity() {
             var showKey by remember { mutableStateOf(false) }
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
+            var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
+            var seasonInput by remember { mutableStateOf("") }
+            var totalEpisodesInput by remember { mutableStateOf("") }
+            var watchedEpisodesInput by remember { mutableStateOf("") }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
             LaunchedEffect(apiKey) {
@@ -168,6 +172,7 @@ class MainActivity : ComponentActivity() {
                                             onStatus = { status -> lifecycleScope.launch { dao.update(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt)) } },
                                             onRating = { rating -> lifecycleScope.launch { dao.update(media.copy(rating = rating)) } },
                                             onProgress = { delta -> lifecycleScope.launch { dao.update(media.copy(watchedEpisodes = (media.watchedEpisodes + delta).coerceIn(0, if (media.totalEpisodes > 0) media.totalEpisodes else 9999))) } },
+                                            onEditProgress = { editingSeries = media; seasonInput = media.totalSeasons.toString(); totalEpisodesInput = media.totalEpisodes.toString(); watchedEpisodesInput = media.watchedEpisodes.toString() },
                                             onDelete = { lifecycleScope.launch { dao.delete(media) } })
                                     }
                                 }
@@ -289,12 +294,31 @@ class MainActivity : ComponentActivity() {
                                             onStatus = { status -> lifecycleScope.launch { dao.update(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt)) } },
                                             onRating = { rating -> lifecycleScope.launch { dao.update(media.copy(rating = rating)) } },
                                             onProgress = { delta -> lifecycleScope.launch { dao.update(media.copy(watchedEpisodes = (media.watchedEpisodes + delta).coerceIn(0, if (media.totalEpisodes > 0) media.totalEpisodes else 9999))) } },
+                                            onEditProgress = { editingSeries = media; seasonInput = media.totalSeasons.toString(); totalEpisodesInput = media.totalEpisodes.toString(); watchedEpisodesInput = media.watchedEpisodes.toString() },
                                             onDelete = { lifecycleScope.launch { dao.delete(media) } })
                                     }
                                 }
                             }
                         }
                     }
+                }
+                if (editingSeries != null) {
+                    val series = editingSeries!!
+                    AlertDialog(onDismissRequest = { editingSeries = null },
+                        title = { Text("Progresso da série") },
+                        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(series.title, color = Purple, fontWeight = FontWeight.Bold)
+                            OutlinedTextField(value = seasonInput, onValueChange = { seasonInput = it.filter(Char::isDigit).take(3) }, label = { Text("Total de temporadas") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                            OutlinedTextField(value = totalEpisodesInput, onValueChange = { totalEpisodesInput = it.filter(Char::isDigit).take(4) }, label = { Text("Total de episódios") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                            OutlinedTextField(value = watchedEpisodesInput, onValueChange = { watchedEpisodesInput = it.filter(Char::isDigit).take(4) }, label = { Text("Episódios assistidos") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                        } },
+                        confirmButton = { TextButton(onClick = {
+                            val total = totalEpisodesInput.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                            val watched = (watchedEpisodesInput.toIntOrNull() ?: 0).coerceIn(0, if (total > 0) total else 9999)
+                            lifecycleScope.launch { dao.update(series.copy(totalSeasons = seasonInput.toIntOrNull()?.coerceAtLeast(0) ?: 0, totalEpisodes = total, watchedEpisodes = watched)) }
+                            editingSeries = null
+                        }) { Text("Salvar") } },
+                        dismissButton = { TextButton(onClick = { editingSeries = null }) { Text("Cancelar") } })
                 }
                 if (showKey) {
                     AlertDialog(onDismissRequest = { showKey = false }, title = { Text("Credencial da API TMDB") },
@@ -338,7 +362,7 @@ private fun SearchCard(item: TmdbResult, onAdd: () -> Unit) {
 }
 
 @Composable
-private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Unit, onStatus: (String) -> Unit, onRating: (Int) -> Unit, onProgress: (Int) -> Unit, onDelete: () -> Unit) {
+private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Unit, onStatus: (String) -> Unit, onRating: (Int) -> Unit, onProgress: (Int) -> Unit, onEditProgress: () -> Unit, onDelete: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(12.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             if (!media.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w342${media.posterPath}", contentDescription = media.title, modifier = Modifier.width(76.dp).height(112.dp))
@@ -352,7 +376,8 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
         }
         if (media.mediaType == "tv") {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Episódios: ${media.watchedEpisodes}${if (media.totalEpisodes > 0) "/${media.totalEpisodes}" else ""}", color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text("T${media.totalSeasons} • ${media.watchedEpisodes}${if (media.totalEpisodes > 0) "/${media.totalEpisodes}" else ""} episódios", color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = onEditProgress) { Text("Editar") }
                 TextButton(onClick = { onProgress(-1) }, enabled = media.watchedEpisodes > 0) { Text("−") }
                 TextButton(onClick = { onProgress(1) }) { Text("+1") }
             }
