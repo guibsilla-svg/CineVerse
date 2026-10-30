@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(18.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             androidx.compose.foundation.Image(
-                                painter = painterResource(id = R.drawable.cineverse_logo_official),
+                                painter = painterResource(id = R.drawable.cineverse_logo),
                                 contentDescription = "Logo oficial CineVerso",
                                 modifier = Modifier.size(54.dp)
                             )
