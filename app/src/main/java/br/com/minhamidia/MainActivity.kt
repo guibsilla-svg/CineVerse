@@ -75,6 +75,11 @@ class MainActivity : ComponentActivity() {
             var seasonProgressInput by remember { mutableStateOf("") }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+            LaunchedEffect(all) {
+                all.filter { it.mediaType == "movie" && it.status == "WATCHING" }.forEach { movie ->
+                    dao.update(movie.copy(status = "WATCHLIST"))
+                }
+            }
             LaunchedEffect(apiKey) {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
@@ -210,7 +215,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                             Spacer(Modifier.height(12.dp))
                                             Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (status, label) ->
+                                            (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
                                                 Button(onClick = {
                                                     lifecycleScope.launch {
                                                         val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
@@ -398,7 +403,7 @@ class MainActivity : ComponentActivity() {
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Box(Modifier.weight(1f)) { StatCard("Na coleção", all.size.toString(), "Títulos salvos") }
-                                    Box(Modifier.weight(1f)) { StatCard("Assistindo", all.count { it.status == "WATCHING" }.toString(), "Em andamento") }
+                                    Box(Modifier.weight(1f)) { StatCard("Assistindo", all.count { it.mediaType == "tv" && it.status == "WATCHING" }.toString(), "Séries em andamento") }
                                 }
                                 Spacer(Modifier.height(14.dp))
                                 Text("EM ALTA • FILMES", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -448,7 +453,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Text("ADICIONADOS RECENTEMENTE", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
                                 if (all.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Sua coleção está vazia. Pesquise um filme ou série para começar.", color = Muted) }
-                                else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 104.dp)) {
                                     items(all.takeLast(12).reversed(), key = { it.id }) { media ->
                                         MediaCard(media, favorites.contains(media.id.toString()),
                                             onFavorite = { val next = favorites.toMutableSet(); if (!next.add(media.id.toString())) next.remove(media.id.toString()); favorites = next; prefs.edit().putStringSet("favorites", next).apply() },
@@ -564,10 +569,11 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val statusLabel = when (media.status) {
-                "WATCHLIST" -> "QUERO ASSISTIR"
-                "WATCHING" -> "TÔ ASSISTINDO"
-                "WATCHED" -> "JÁ ASSISTI"
+            val statusLabel = when {
+                media.mediaType == "movie" && media.status == "WATCHING" -> "QUERO ASSISTIR"
+                media.status == "WATCHLIST" -> "QUERO ASSISTIR"
+                media.mediaType == "tv" && media.status == "WATCHING" -> "TÔ ASSISTINDO"
+                media.status == "WATCHED" -> "JÁ ASSISTI"
                 else -> "NA COLEÇÃO"
             }
             Text(statusLabel, color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
@@ -578,7 +584,9 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
         if (showStatusActions) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = { onStatus("WATCHLIST") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Quero assistir", fontSize = 10.sp) }
-                Button(onClick = { onStatus("WATCHING") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Tô assistindo", fontSize = 10.sp) }
+                if (media.mediaType == "tv") {
+                    Button(onClick = { onStatus("WATCHING") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Tô assistindo", fontSize = 10.sp) }
+                }
                 Button(onClick = { onStatus("WATCHED") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Já assisti", fontSize = 10.sp) }
             }
         }
