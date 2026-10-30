@@ -56,6 +56,9 @@ class MainActivity : ComponentActivity() {
             var yearFilter by remember { mutableStateOf("Todos") }
             var sortMode by remember { mutableStateOf("Manual") }
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
+            var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
+            var detailSeasons by remember { mutableStateOf("[]") }
+            var detailLoading by remember { mutableStateOf(false) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendationsLoading by remember { mutableStateOf(false) }
@@ -120,7 +123,7 @@ class MainActivity : ComponentActivity() {
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = Purple, background = Night, surface = Panel, onBackground = TextMain, onSurface = TextMain)) {
                 Surface(Modifier.fillMaxSize(), color = Night) {
-                    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 16.dp)) {
                         Spacer(Modifier.height(18.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             androidx.compose.foundation.Image(
@@ -180,14 +183,70 @@ class MainActivity : ComponentActivity() {
                                 Text(message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                     items(results, key = { "${it.type}-${it.id}" }) { item ->
-                                        SearchCard(item, onAdd = {
-                                            lifecycleScope.launch {
-                                                val existing = dao.findByTmdbId(item.id, item.type)
-                                                if (existing == null) { dao.insert(item.toMediaItem()); message = "Adicionado à sua coleção." }
-                                                else message = "Esse título já está na sua coleção."
-                                                results = results.filterNot { it.id == item.id && it.type == item.type }
+                                        SearchCard(item, onOpen = {
+                                            detailItem = item
+                                            page = "Detalhes"
+                                            if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
+                                                detailLoading = true
+                                                detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                detailLoading = false
                                             }
                                         })
+                                    }
+                                }
+                            }
+                            "Detalhes" -> {
+                                val item = detailItem
+                                if (item != null) {
+                                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                                        item {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                TextButton(onClick = { page = "Buscar" }) { Text("← Voltar") }
+                                                Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+                                                if (!item.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w342${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(112.dp).height(166.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(item.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                                    Text("${if (item.type == "tv") "Série" else "Filme"} • ${item.year}", color = Muted)
+                                                    Spacer(Modifier.height(8.dp))
+                                                    Text(item.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
+                                                }
+                                            }
+                                            Spacer(Modifier.height(12.dp))
+                                            Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti").forEach { (status, label) ->
+                                                Button(onClick = {
+                                                    lifecycleScope.launch {
+                                                        val existing = dao.findByTmdbId(item.id, item.type)
+                                                        var media = existing ?: item.toMediaItem()
+                                                        if (item.type == "tv" && media.seasonProgress.isBlank() && apiKey.isNotBlank()) {
+                                                            val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                            val seasons = JSONArray(imported)
+                                                            var episodes = 0
+                                                            for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0
+                                                            media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
+                                                        }
+                                                        dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
+                                                        page = "Minha lista"
+                                                    }
+                                                }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                                            }
+                                            if (item.type == "tv") {
+                                                Spacer(Modifier.height(8.dp))
+                                                Text("TEMPORADAS", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                if (detailLoading) CircularProgressIndicator()
+                                                else {
+                                                    val seasons = JSONArray(detailSeasons)
+                                                    if (seasons.length() == 0) Text("Dados de temporadas indisponíveis. Confira a conexão e a credencial TMDB.", color = Muted, fontSize = 12.sp)
+                                                    for (i in 0 until seasons.length()) {
+                                                        val season = seasons.optJSONObject(i) ?: continue
+                                                        if (season.optInt("number") == 0) continue
+                                                        Text("${season.optString("name")} • ${season.optInt("episodes")} episódios • ${season.optString("airDate")}", color = Muted, fontSize = 12.sp)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -340,9 +399,12 @@ class MainActivity : ComponentActivity() {
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         items(recommendedMovies, key = { "movie-" + it.id }) { item ->
                                             RecommendationCard(item) {
-                                                lifecycleScope.launch {
-                                                    if (dao.findByTmdbId(item.id, item.type) == null) dao.insert(item.toMediaItem())
-                                                    page = "Minha lista"
+                                                detailItem = item
+                                                page = "Detalhes"
+                                                if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
+                                                    detailLoading = true
+                                                    detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                    detailLoading = false
                                                 }
                                             }
                                         }
@@ -357,9 +419,12 @@ class MainActivity : ComponentActivity() {
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         items(recommendedShows, key = { "tv-" + it.id }) { item ->
                                             RecommendationCard(item) {
-                                                lifecycleScope.launch {
-                                                    if (dao.findByTmdbId(item.id, item.type) == null) dao.insert(item.toMediaItem())
-                                                    page = "Minha lista"
+                                                detailItem = item
+                                                page = "Detalhes"
+                                                if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
+                                                    detailLoading = true
+                                                    detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                    detailLoading = false
                                                 }
                                             }
                                         }
@@ -421,8 +486,8 @@ class MainActivity : ComponentActivity() {
 
 
 @Composable
-private fun RecommendationCard(item: TmdbResult, onAdd: () -> Unit) {
-    Column(Modifier.width(116.dp).clickable(onClick = onAdd), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
+    Column(Modifier.width(116.dp).clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!item.posterPath.isNullOrBlank()) {
             AsyncImage(model = "https://image.tmdb.org/t/p/w342" + item.posterPath, contentDescription = item.title, modifier = Modifier.fillMaxWidth().height(166.dp))
         } else {
@@ -436,8 +501,8 @@ private fun RecommendationCard(item: TmdbResult, onAdd: () -> Unit) {
 }
 
 @Composable
-private fun SearchCard(item: TmdbResult, onAdd: () -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SearchCard(item: TmdbResult, onOpen: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).clickable(onClick = onOpen).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         if (!item.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w185${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(58.dp).height(84.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
@@ -445,7 +510,7 @@ private fun SearchCard(item: TmdbResult, onAdd: () -> Unit) {
             Text("${if (item.type == "tv") "Série" else "Filme"} • ${item.year.ifBlank { "Ano indisponível" }}", color = Muted, fontSize = 12.sp)
             if (item.overview.isNotBlank()) Text(item.overview, color = Muted, fontSize = 11.sp, maxLines = 3)
         }
-        IconButton(onClick = onAdd) { Icon(Icons.Default.Add, "Adicionar à coleção", tint = Purple) }
+        Text("Detalhes", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
