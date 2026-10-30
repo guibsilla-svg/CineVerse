@@ -50,6 +50,23 @@ object TmdbClient {
         request("/tv/popular", credential, mapOf("language" to "pt-BR"))
 
 
+
+    suspend fun discoverRandom(type: String, genreId: Int?, credential: String): List<TmdbResult> {
+        val endpoint = if (type == "tv") "/discover/tv" else "/discover/movie"
+        val base = mutableMapOf(
+            "language" to "pt-BR",
+            "include_adult" to "false",
+            "sort_by" to "popularity.desc",
+            "page" to "1"
+        )
+        if (genreId != null) base["with_genres"] = genreId.toString()
+        val firstPage = requestObject(endpoint, credential, base)
+        val totalPages = firstPage.optInt("total_pages", 1).coerceIn(1, 500)
+        val randomPage = (1..totalPages).random()
+        base["page"] = randomPage.toString()
+        return request(endpoint, credential, base).filter { it.posterPath != null }
+    }
+
     suspend fun trailer(id: Int, type: String, credential: String): TmdbTrailer? {
         val endpoint = if (type == "tv") "tv" else "movie"
         val videos = requestObject("/$endpoint/$id/videos", credential, mapOf(

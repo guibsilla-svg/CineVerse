@@ -6,6 +6,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -87,6 +94,9 @@ class MainActivity : ComponentActivity() {
             var rouletteMode by remember { mutableStateOf("DISCOVER") }
             var rouletteSuggestion by remember { mutableStateOf<TmdbResult?>(null) }
             var rouletteSpinning by remember { mutableStateOf(false) }
+            var rouletteGenre by remember { mutableStateOf("Todos") }
+            var rouletteGenreMenu by remember { mutableStateOf(false) }
+            val rouletteWheelRotation = remember { Animatable(0f) }
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
             LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
                 val selected = detailItem
@@ -622,46 +632,70 @@ class MainActivity : ComponentActivity() {
                 if (showRouletteDialog) {
                     val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null }
                         .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate) }
-                    val catalogOptions = (if (rouletteType == "tv") recommendedShows else recommendedMovies)
-                        .filter { candidate -> all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id } }
-                    val options = if (rouletteMode == "LIST") collectionOptions else catalogOptions
-                    val waitingForCatalog = rouletteMode == "DISCOVER" && recommendationsLoading
+                    val options = if (rouletteMode == "LIST") collectionOptions else emptyList()
+                    val genreOptions = if (rouletteType == "movie") listOf(
+                        "Todos" to null, "Ação" to 28, "Aventura" to 12, "Animação" to 16, "Comédia" to 35,
+                        "Crime" to 80, "Documentário" to 99, "Drama" to 18, "Família" to 10751, "Fantasia" to 14,
+                        "Ficção científica" to 878, "Mistério" to 9648, "Romance" to 10749, "Terror" to 27,
+                        "Suspense" to 53, "Musical" to 10402, "Guerra" to 10752, "Faroeste" to 37
+                    ) else listOf(
+                        "Todos" to null, "Ação e aventura" to 10759, "Animação" to 16, "Comédia" to 35,
+                        "Crime" to 80, "Documentário" to 99, "Drama" to 18, "Família" to 10751,
+                        "Infantil" to 10762, "Mistério" to 9648, "Notícias" to 10763, "Reality" to 10764,
+                        "Ficção científica e fantasia" to 10765, "Novela" to 10766, "Talk show" to 10767,
+                        "Guerra e política" to 10768, "Western" to 37
+                    )
+                    val selectedGenreId = genreOptions.firstOrNull { it.first == rouletteGenre }?.second
                     AlertDialog(
                         onDismissRequest = { if (!rouletteSpinning) showRouletteDialog = false },
-                        title = { Text(if (rouletteSuggestion != null && !rouletteSpinning) "A roleta escolheu!" else "O que você quer assistir?", color = TextMain, fontWeight = FontWeight.ExtraBold) },
+                        title = { Text(if (rouletteSuggestion != null && !rouletteSpinning) "A roleta escolheu!" else "Roleta CineVerso", color = TextMain, fontWeight = FontWeight.ExtraBold) },
                         text = {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(11.dp)) {
                                 if (rouletteSuggestion != null && !rouletteSpinning) {
                                     val picked = rouletteSuggestion!!
                                     if (!picked.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w342${picked.posterPath}", contentDescription = picked.title, modifier = Modifier.width(132.dp).height(190.dp), contentScale = ContentScale.Crop)
-                                    Text(picked.title, color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text(picked.title, color = TextMain, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
                                     Text("${if (picked.type == "tv") "Série" else "Filme"} • ${picked.year.ifBlank { "Ano indisponível" }}", color = Muted)
-                                    Text(if (rouletteMode == "LIST") "Sorteado da sua coleção" else "Descoberta do catálogo TMDB", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(if (rouletteMode == "LIST") "Sorteado da sua coleção" else "Descoberta aleatória • ${rouletteGenre}", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 } else {
-                                    Text("Escolha de onde vem o sorteio:", color = Muted)
+                                    Text("Hoje quem escolhe é o acaso.", color = Muted, fontSize = 13.sp)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                         if (rouletteMode == "LIST") {
                                             Button(onClick = { rouletteMode = "LIST"; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Minha lista") }
-                                            OutlinedButton(onClick = { rouletteMode = "DISCOVER"; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Descobrir algo novo") }
+                                            OutlinedButton(onClick = { rouletteMode = "DISCOVER"; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Descobrir") }
                                         } else {
                                             OutlinedButton(onClick = { rouletteMode = "LIST"; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Minha lista") }
-                                            Button(onClick = { rouletteMode = "DISCOVER"; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Descobrir algo novo") }
+                                            Button(onClick = { rouletteMode = "DISCOVER"; rouletteSuggestion = null }, modifier = Modifier.weight(1f)) { Text("Descobrir") }
                                         }
                                     }
-                                    Text(if (rouletteMode == "LIST") "Somente títulos da sua coleção ainda não assistidos." else "Títulos do TMDB que ainda não estão na sua coleção.", color = Muted, fontSize = 12.sp)
-                                    Text("Escolha uma categoria:", color = Muted)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Button(onClick = { rouletteType = "movie"; rouletteSuggestion = null }, enabled = !rouletteSpinning, modifier = Modifier.weight(1f)) { Text("Filme") }
-                                        OutlinedButton(onClick = { rouletteType = "tv"; rouletteSuggestion = null }, enabled = !rouletteSpinning, modifier = Modifier.weight(1f)) { Text("Série") }
+                                    Text(if (rouletteMode == "LIST") "Títulos da sua coleção que ainda não foram assistidos." else "Catálogo completo do TMDB: sorteio em páginas aleatórias, sem ficar preso aos títulos em alta." , color = Muted, fontSize = 11.sp)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Button(onClick = { rouletteType = "movie"; rouletteGenre = "Todos"; rouletteSuggestion = null }, modifier = Modifier.weight(1f), enabled = !rouletteSpinning) { Text("🎬 Filme") }
+                                        OutlinedButton(onClick = { rouletteType = "tv"; rouletteGenre = "Todos"; rouletteSuggestion = null }, modifier = Modifier.weight(1f), enabled = !rouletteSpinning) { Text("📺 Série") }
                                     }
-                                    Text(if (rouletteType == "movie") "CATEGORIA: FILMES" else "CATEGORIA: SÉRIES", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    if (rouletteSpinning || waitingForCatalog) {
-                                        CircularProgressIndicator(color = Purple)
-                                        Text(if (waitingForCatalog) "Carregando catálogo..." else "Girando a roleta...", color = Muted, fontWeight = FontWeight.SemiBold)
+                                    Box {
+                                        OutlinedButton(onClick = { rouletteGenreMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !rouletteSpinning) {
+                                            Text("Gênero: $rouletteGenre  ▾")
+                                        }
+                                        DropdownMenu(expanded = rouletteGenreMenu, onDismissRequest = { rouletteGenreMenu = false }) {
+                                            genreOptions.forEach { (name, _) ->
+                                                DropdownMenuItem(text = { Text(name) }, onClick = { rouletteGenre = name; rouletteSuggestion = null; rouletteGenreMenu = false })
+                                            }
+                                        }
                                     }
-                                    if (!waitingForCatalog && options.isEmpty() && !rouletteSpinning) {
-                                        Text(if (rouletteMode == "LIST") "Não há ${if (rouletteType == "movie") "filmes" else "séries"} não assistidos na sua lista." else "Não há novidades disponíveis nessa categoria no momento.", color = Muted, fontSize = 12.sp)
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(190.dp)) {
+                                        Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = rouletteWheelRotation.value }) {
+                                            val colors = listOf(Purple, Color(0xFF5D35A5), Color(0xFFDBA7FF), Color(0xFF39205F), Color(0xFF8B4CE0), Color(0xFF241638), Color(0xFFC58BFF), Color(0xFF7040B8))
+                                            val slice = 360f / colors.size
+                                            colors.forEachIndexed { index, color ->
+                                                drawArc(color = color, startAngle = index * slice, sweepAngle = slice - 2f, useCenter = true)
+                                            }
+                                            drawCircle(color = Night, radius = size.minDimension * .16f)
+                                            drawCircle(color = Color.White.copy(alpha = .8f), radius = size.minDimension * .16f, style = Stroke(width = 3.dp.toPx()))
+                                        }
+                                        Text("▶", color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Black)
                                     }
+                                    Text(if (rouletteSpinning) "A sorte está sendo lançada..." else "Toque em GIRAR e deixe a roleta decidir!", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         },
@@ -680,17 +714,36 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }) { Text("Ver detalhes") }
                             } else {
-                                TextButton(enabled = !rouletteSpinning && options.isNotEmpty() && !waitingForCatalog, onClick = {
+                                TextButton(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty()), onClick = {
                                     rouletteSpinning = true
                                     lifecycleScope.launch {
-                                        repeat(18) { index ->
-                                            rouletteSuggestion = options.random()
-                                            kotlinx.coroutines.delay(70L + index * 9L)
+                                        try {
+                                            val pool = if (rouletteMode == "LIST") options else {
+                                                var found: List<TmdbResult> = emptyList()
+                                                repeat(5) {
+                                                    if (found.isEmpty()) {
+                                                        found = TmdbClient.discoverRandom(rouletteType, selectedGenreId, apiKey)
+                                                            .filter { candidate -> all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id } }
+                                                    }
+                                                }
+                                                found
+                                            }
+                                            if (pool.isEmpty()) {
+                                                message = "Não encontrei títulos disponíveis com esse gênero. Tente outro filtro."
+                                            } else {
+                                                rouletteWheelRotation.animateTo(
+                                                    rouletteWheelRotation.value + 1440f + (90..720).random(),
+                                                    animationSpec = tween(durationMillis = 3200, easing = FastOutSlowInEasing)
+                                                )
+                                                rouletteSuggestion = pool.random()
+                                            }
+                                        } catch (error: Exception) {
+                                            message = error.message ?: "Não foi possível consultar o catálogo."
+                                        } finally {
+                                            rouletteSpinning = false
                                         }
-                                        rouletteSuggestion = options.random()
-                                        rouletteSpinning = false
                                     }
-                                }) { Text("Girar roleta") }
+                                }) { Text(if (rouletteSpinning) "Girando..." else "GIRAR A ROLETA") }
                             }
                         },
                         dismissButton = {
@@ -703,7 +756,7 @@ class MainActivity : ComponentActivity() {
                         containerColor = Panel
                     )
                 }
-                if (editingSeries != null) {
+                                if (editingSeries != null) {
                     val series = editingSeries!!
                     AlertDialog(onDismissRequest = { editingSeries = null },
                         title = { Text("Progresso da série") },
