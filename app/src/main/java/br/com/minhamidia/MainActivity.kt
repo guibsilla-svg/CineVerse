@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
             var paletteName by remember { mutableStateOf(prefs.getString("palette", "Roxo") ?: "Roxo") }
             val palette = cinePalette(paletteName)
             var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
+            var featuredTitle by remember { mutableStateOf(prefs.getString("featured_title", "") ?: "") }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
@@ -193,6 +194,7 @@ class MainActivity : ComponentActivity() {
 
                     val tasteProfile = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
                     fun personalized(items: List<TmdbResult>, mediaType: String): List<TmdbResult> {
+                        if (homeOrder == "Descobertas primeiro" || tasteProfile.isEmpty()) return items.take(12)
                         val profile = tasteProfile.filter { it.mediaType == mediaType }
                         if (profile.isEmpty()) return items.take(12)
                         val tokens = profile.flatMap { (it.title + " " + it.overview + " " + it.genres).lowercase().split(Regex("[^\\p{L}\\p{N}]+")) }
@@ -648,6 +650,20 @@ class MainActivity : ComponentActivity() {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     listOf("Roxo", "Azul", "Rubi", "Esmeralda", "Dourado").forEach { option ->
                                         FilterChip(selected = paletteName == option, onClick = { paletteName = option; prefs.edit().putString("palette", option).apply() }, label = { Text(option, fontSize = 10.sp) })
+                                    }
+                                }
+                                Text("DESTAQUE DA PÁGINA INICIAL", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Escolha um título da sua coleção para destacar.", color = Muted, fontSize = 12.sp)
+                                var featuredMenu by remember { mutableStateOf(false) }
+                                Box {
+                                    OutlinedButton(onClick = { featuredMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                                        Text(featuredTitle.ifBlank { "Escolher título em destaque" }, maxLines = 1)
+                                    }
+                                    DropdownMenu(expanded = featuredMenu, onDismissRequest = { featuredMenu = false }) {
+                                        DropdownMenuItem(text = { Text("Sem destaque") }, onClick = { featuredTitle = ""; prefs.edit().remove("featured_title").apply(); featuredMenu = false })
+                                        all.forEach { media ->
+                                            DropdownMenuItem(text = { Text(media.title, maxLines = 1) }, onClick = { featuredTitle = media.title; prefs.edit().putString("featured_title", media.title).apply(); featuredMenu = false })
+                                        }
                                     }
                                 }
                                 Text("ORGANIZAÇÃO DA PÁGINA INICIAL", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
