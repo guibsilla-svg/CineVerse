@@ -20,5 +20,6 @@ data class MediaItem(
     val totalSeasons: Int = 0,
     val watchedEpisodes: Int = 0,
     val totalEpisodes: Int = 0,
-    val releaseDate: String = ""
+    val releaseDate: String = "",
+    val seasonProgress: String = ""
 )
