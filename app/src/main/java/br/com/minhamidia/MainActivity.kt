@@ -312,19 +312,22 @@ class MainActivity : ComponentActivity() {
                                     } else if (exploreError.isNotBlank() && exploreResults.isEmpty()) {
                                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(exploreError, color = Muted) }
                                     } else {
-                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                                            items(exploreResults, key = { "explore-${it.type}-${it.id}" }) { item ->
-                                                val alreadySaved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
-                                                Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                    AsyncImage(model = "https://image.tmdb.org/t/p/w185${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(66.dp).height(96.dp), contentScale = ContentScale.Crop)
-                                                    Spacer(Modifier.width(10.dp))
-                                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                        Text(item.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2)
-                                                        Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 11.sp)
-                                                        if (item.overview.isNotBlank()) Text(item.overview, color = Muted, fontSize = 10.sp, maxLines = 3)
-                                                        TextButton(onClick = { detailItem = item; detailReturnPage = "Explorar"; navigateTo("Detalhes"); if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch { detailLoading = true; detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]"); detailLoading = false } }, contentPadding = PaddingValues(0.dp)) { Text("Ver detalhes", color = Purple, fontSize = 11.sp) }
-                                                        Button(onClick = { lifecycleScope.launch { if (dao.findByTmdbId(item.id, item.type) == null) { var saved = item.toMediaItem(); if (item.type == "tv" && apiKey.isNotBlank()) { val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]"); val seasons = JSONArray(imported); var episodes = 0; for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0; saved = saved.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported) }; dao.insert(saved) } } }, enabled = !alreadySaved, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp)) { Text(if (alreadySaved) "Na minha lista" else "+ Minha lista", fontSize = 10.sp) }
+                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                            items(exploreResults.chunked(3), key = { row -> "explore-" + (row.firstOrNull()?.id ?: 0) }) { rowItems ->
+                                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                                    rowItems.forEach { item ->
+                                                        ExploreMediaCard(item, Modifier.weight(1f)) {
+                                                            detailItem = item
+                                                            detailReturnPage = "Explorar"
+                                                            navigateTo("Detalhes")
+                                                            if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
+                                                                detailLoading = true
+                                                                detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                                detailLoading = false
+                                                            }
+                                                        }
                                                     }
+                                                    repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                                                 }
                                             }
                                             if (exploreCanLoadMore) item {
@@ -913,6 +916,26 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
     "Terror" to 27, "Mistério" to 9648, "Romance" to 10749, "Ficção científica" to 878, "Suspense" to 53
 )
 
+
+@Composable
+private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (!item.posterPath.isNullOrBlank()) {
+            AsyncImage(
+                model = "https://image.tmdb.org/t/p/w342" + item.posterPath,
+                contentDescription = item.title,
+                modifier = Modifier.fillMaxWidth().height(150.dp),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(Modifier.fillMaxWidth().height(150.dp).background(Panel, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                Text("CineVerso", color = Purple, fontSize = 11.sp)
+            }
+        }
+        Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
+        Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
+    }
+}
 @Composable
 private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
