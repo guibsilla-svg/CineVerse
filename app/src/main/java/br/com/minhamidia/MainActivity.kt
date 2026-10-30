@@ -59,13 +59,6 @@ class MainActivity : ComponentActivity() {
                     page = destination
                 }
             }
-            BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
-                when {
-                    showKey -> showKey = false
-                    editingSeries != null -> editingSeries = null
-                    pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
-                }
-            }
             var filter by remember { mutableStateOf("Quero assistir") }
             var categoryFilter by remember { mutableStateOf("FILMES") }
             var yearFilter by remember { mutableStateOf("Todos") }
@@ -84,6 +77,13 @@ class MainActivity : ComponentActivity() {
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
+            BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
+                when {
+                    showKey -> showKey = false
+                    editingSeries != null -> editingSeries = null
+                    pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
+                }
+            }
             var seasonInput by remember { mutableStateOf("") }
             var totalEpisodesInput by remember { mutableStateOf("") }
             var watchedEpisodesInput by remember { mutableStateOf("") }
