@@ -46,6 +46,10 @@ import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -61,6 +65,28 @@ class MainActivity : ComponentActivity() {
         val dao = AppDatabase.get(this).mediaDao()
         val prefs = getSharedPreferences("cineverse_settings", MODE_PRIVATE)
         setContent {
+            var updateVersion by remember { mutableStateOf<String?>(null) }
+            var updateApkUrl by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(Unit) {
+                val release = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases/latest").openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 10000
+                            readTimeout = 10000
+                            setRequestProperty("Accept", "application/vnd.github+json")
+                            setRequestProperty("User-Agent", "CineVerso-Android")
+                        }
+                        try {
+                            val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                            val tag = json.optString("tag_name").removePrefix("v")
+                            val assets = json.optJSONArray("assets")
+                            val apk = assets?.let { array -> (0 until array.length()).map { array.getJSONObject(it) }.firstOrNull { it.optString("name") == "cineverse.apk" }?.optString("browser_download_url") }
+                            if (tag.isNotBlank() && apk?.startsWith("https://") == true && compareVersions(tag, BuildConfig.VERSION_NAME) > 0) tag to apk else null
+                        } finally { connection.disconnect() }
+                    }.getOrNull()
+                }
+                if (release != null) { updateVersion = release.first; updateApkUrl = release.second }
+            }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
@@ -842,6 +868,19 @@ class MainActivity : ComponentActivity() {
                         }) { Text("Salvar") } },
                         dismissButton = { TextButton(onClick = { editingSeries = null }) { Text("Cancelar") } })
                 }
+                if (updateVersion != null && updateApkUrl != null) {
+                    AlertDialog(
+                        onDismissRequest = { updateVersion = null; updateApkUrl = null },
+                        title = { Text("Atualização disponível") },
+                        text = { Text("O CineVerso " + updateVersion + " está disponível. Baixe a nova versão e instale por cima da atual, sem desinstalar o aplicativo.") },
+                        confirmButton = { TextButton(onClick = {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateApkUrl)))
+                            updateVersion = null
+                            updateApkUrl = null
+                        }) { Text("Baixar atualização") } },
+                        dismissButton = { TextButton(onClick = { updateVersion = null; updateApkUrl = null }) { Text("Depois") } }
+                    )
+                }
                 if (showKey) {
                     AlertDialog(onDismissRequest = { showKey = false }, title = { Text("Credencial da API TMDB") },
                         text = { Column { Text("Cole a API Read Access Token (Bearer) ou a API Key v3. Ambas ficam em themoviedb.org/settings/api."); Spacer(Modifier.height(8.dp)); OutlinedTextField(value = apiKey, onValueChange = { apiKey = it.trim() }, label = { Text("Token Bearer ou API Key v3") }, singleLine = true) } },
@@ -853,6 +892,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
+private fun compareVersions(first: String, second: String): Int {
+    val a = first.split(".").map { it.toIntOrNull() ?: 0 }
+    val b = second.split(".").map { it.toIntOrNull() ?: 0 }
+    for (index in 0 until maxOf(a.size, b.size)) {
+        val comparison = a.getOrElse(index) { 0 }.compareTo(b.getOrElse(index) { 0 })
+        if (comparison != 0) return comparison
+    }
+    return 0
+}
 
 private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == "tv") listOf(
     "Todos" to null, "Ação e aventura" to 10759, "Animação" to 16, "Comédia" to 35, "Crime" to 80,
