@@ -308,13 +308,13 @@ class MainActivity : ComponentActivity() {
                                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                             rowItems.forEach { media ->
                                                 CompactMediaCard(media, Modifier.weight(1f)) {
-                                                    detailItem = TmdbResult(media.tmdbId, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
+                                                    detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
                                                     detailReturnPage = "Minha lista"
                                                     detailSeasons = media.seasonProgress.ifBlank { "[]" }
                                                     page = "Detalhes"
                                                     if (media.mediaType == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                         detailLoading = true
-                                                        val imported = runCatching { TmdbClient.seriesSeasons(media.tmdbId, apiKey) }.getOrDefault("[]")
+                                                        val imported = runCatching { TmdbClient.seriesSeasons(media.tmdbId ?: 0, apiKey) }.getOrDefault("[]")
                                                         val saved = runCatching { JSONArray(media.seasonProgress) }.getOrNull()
                                                         val fresh = JSONArray(imported)
                                                         if (saved != null) {
