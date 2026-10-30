@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -69,6 +70,8 @@ class MainActivity : ComponentActivity() {
             var detailReturnPage by remember { mutableStateOf("Buscar") }
             var detailSeasons by remember { mutableStateOf("[]") }
             var detailLoading by remember { mutableStateOf(false) }
+            var detailTrailer by remember { mutableStateOf<br.com.minhamidia.data.TmdbTrailer?>(null) }
+            var detailTrailerLoading by remember { mutableStateOf(false) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendationsLoading by remember { mutableStateOf(false) }
@@ -78,6 +81,18 @@ class MainActivity : ComponentActivity() {
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
+            LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
+                val selected = detailItem
+                if (page == "Detalhes" && selected != null && apiKey.isNotBlank()) {
+                    detailTrailer = null
+                    detailTrailerLoading = true
+                    detailTrailer = runCatching { TmdbClient.trailer(selected.id, selected.type, apiKey) }.getOrNull()
+                    detailTrailerLoading = false
+                } else {
+                    detailTrailer = null
+                    detailTrailerLoading = false
+                }
+            }
             BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
                 when {
                     showKey -> showKey = false
@@ -247,16 +262,48 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
-                                            OutlinedButton(
-                                                onClick = {
-                                                    val trailerQuery = "${selectedTitle.title} ${selectedTitle.year} trailer oficial"
-                                                    val youtubeUrl = "https://www.youtube.com/results?search_query=${Uri.encode(trailerQuery)}"
-                                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl)))
-                                                },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF5A5F))
-                                            ) {
-                                                Text("▶  Assistir trailer no YouTube", fontWeight = FontWeight.Bold)
+                                            Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            when {
+                                                detailTrailerLoading -> Box(
+                                                    Modifier.fillMaxWidth().height(190.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) { CircularProgressIndicator(color = Purple) }
+                                                detailTrailer != null -> {
+                                                    val trailer = detailTrailer!!
+                                                    Box(
+                                                        Modifier.fillMaxWidth().height(190.dp)
+                                                            .background(Panel, RoundedCornerShape(14.dp))
+                                                            .clickable {
+                                                                val youtubeUrl = "https://www.youtube.com/watch?v=${trailer.key}"
+                                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl)))
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = "https://img.youtube.com/vi/${trailer.key}/hqdefault.jpg",
+                                                            contentDescription = "Miniatura do trailer de ${selectedTitle.title}",
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentScale = ContentScale.Crop
+                                                        )
+                                                        Text(
+                                                            "▶",
+                                                            color = Color.White,
+                                                            fontSize = 34.sp,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            modifier = Modifier.background(Color(0xCCB00020), RoundedCornerShape(50)).padding(horizontal = 22.dp, vertical = 10.dp)
+                                                        )
+                                                        Text(
+                                                            "ASSISTIR NO YOUTUBE",
+                                                            color = Color.White,
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                                                .background(Color(0xCC08070D)).padding(9.dp)
+                                                        )
+                                                    }
+                                                    Text(trailer.name, color = Muted, fontSize = 11.sp, maxLines = 2)
+                                                }
+                                                else -> Text("Trailer não encontrado no TMDB para este título.", color = Muted, fontSize = 12.sp)
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
