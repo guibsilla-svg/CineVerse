@@ -938,20 +938,11 @@ class MainActivity : ComponentActivity() {
                                     rouletteSuggestion = null
                                     rouletteScope.launch {
                                         try {
+                                            rouletteCarouselItems = pool.shuffled().take(12)
                                             rouletteWheelRotation.animateTo(
                                                 rouletteWheelRotation.value + 1800f + (360..900).random(),
                                                 animationSpec = tween(durationMillis = 5200, easing = FastOutSlowInEasing)
                                             )
-                                            val pool = if (rouletteMode == "LIST") options else {
-                                                var found: List<TmdbResult> = emptyList()
-                                                repeat(5) {
-                                                    if (found.isEmpty()) {
-                                                        found = TmdbClient.discoverRandom(rouletteType, selectedGenreId, rouletteYear.takeIf { it != "Todos" }, apiKey)
-                                                            .filter { candidate -> all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id } }
-                                                    }
-                                                }
-                                                found
-                                            }
                                             if (pool.isEmpty()) {
                                                 rouletteError = "Não encontrei títulos com esse filtro. Tente outro gênero."
                                             } else {
