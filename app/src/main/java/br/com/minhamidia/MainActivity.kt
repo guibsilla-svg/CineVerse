@@ -99,25 +99,36 @@ class MainActivity : ComponentActivity() {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
                     recommendationsError = ""
-                    try {
-                        val movies = runCatching { TmdbClient.trendingMovies(apiKey) }
-                            .getOrElse { TmdbClient.popularMovies(apiKey) }
-                        recommendedMovies = movies.filter { it.posterPath != null }.take(12)
-                        val shows = runCatching { TmdbClient.trendingShows(apiKey) }
-                            .getOrElse { TmdbClient.popularShows(apiKey) }
-                        recommendedShows = shows.filter { it.posterPath != null }.take(12)
-                        if (recommendedMovies.isEmpty() && recommendedShows.isEmpty()) {
-                            recommendationsError = "O TMDB não retornou títulos para as recomendações."
-                        }
-                    } catch (e: Exception) {
-                        recommendationsError = e.message ?: "Não foi possível carregar as recomendações."
-                    } finally {
-                        recommendationsLoading = false
+                    recommendedMovies = emptyList()
+                    recommendedShows = emptyList()
+
+                    val movieResult = runCatching {
+                        val trending = TmdbClient.trendingMovies(apiKey).filter { it.posterPath != null }
+                        if (trending.isNotEmpty()) trending else TmdbClient.popularMovies(apiKey).filter { it.posterPath != null }
                     }
+                    val showResult = runCatching {
+                        val trending = TmdbClient.trendingShows(apiKey).filter { it.posterPath != null }
+                        if (trending.isNotEmpty()) trending else TmdbClient.popularShows(apiKey).filter { it.posterPath != null }
+                    }
+
+                    recommendedMovies = movieResult.getOrDefault(emptyList()).take(12)
+                    recommendedShows = showResult.getOrDefault(emptyList()).take(12)
+
+                    val errors = listOfNotNull(
+                        movieResult.exceptionOrNull()?.message?.let { "Filmes: $it" },
+                        showResult.exceptionOrNull()?.message?.let { "Séries: $it" }
+                    )
+                    recommendationsError = when {
+                        recommendedMovies.isEmpty() && recommendedShows.isEmpty() ->
+                            errors.joinToString(" • ").ifBlank { "O TMDB não retornou títulos com pôsteres." }
+                        else -> errors.joinToString(" • ")
+                    }
+                    recommendationsLoading = false
                 } else {
                     recommendedMovies = emptyList()
                     recommendedShows = emptyList()
                     recommendationsError = ""
+                    recommendationsLoading = false
                 }
             }
             val availableYears = all.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending()
