@@ -243,7 +243,6 @@ class MainActivity : ComponentActivity() {
                                                             media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
                                                         }
                                                         dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
-                                                        navigateTo("Minha lista")
                                                     }
                                                 }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                                             }
