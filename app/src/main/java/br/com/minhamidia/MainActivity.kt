@@ -468,23 +468,36 @@ class MainActivity : ComponentActivity() {
                                                 else -> Text("Trailer não encontrado no TMDB para este título.", color = Muted, fontSize = 12.sp)
                                             }
                                             Spacer(Modifier.height(4.dp))
-                                            Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
-                                                Button(onClick = {
-                                                    lifecycleScope.launch {
-                                                        val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
-                                                        var media = existing ?: selectedTitle.toMediaItem()
-                                                        if (selectedTitle.type == "tv" && media.seasonProgress.isBlank() && apiKey.isNotBlank()) {
-                                                            val imported = runCatching { TmdbClient.seriesSeasons(selectedTitle.id, apiKey) }.getOrDefault("[]")
-                                                            val seasons = JSONArray(imported)
-                                                            var episodes = 0
-                                                            for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0
-                                                            media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
+                                            val savedTitle = all.firstOrNull { it.tmdbId == selectedTitle.id && it.mediaType == selectedTitle.type }
+                                            if (savedTitle != null) {
+                                                Button(
+                                                    onClick = {
+                                                        lifecycleScope.launch {
+                                                            val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                            if (existing != null) dao.delete(existing)
                                                         }
-                                                        dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
-                                                        page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage
-                                                    }
-                                                }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15352D), contentColor = Color(0xFF65D6A2))
+                                                ) { Text("NA MINHA LISTA • REMOVER") }
+                                            } else {
+                                                Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
+                                                    Button(onClick = {
+                                                        lifecycleScope.launch {
+                                                            var media = selectedTitle.toMediaItem()
+                                                            if (selectedTitle.type == "tv" && media.seasonProgress.isBlank() && apiKey.isNotBlank()) {
+                                                                val imported = runCatching { TmdbClient.seriesSeasons(selectedTitle.id, apiKey) }.getOrDefault("[]")
+                                                                val seasons = JSONArray(imported)
+                                                                var episodes = 0
+                                                                for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0
+                                                                media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
+                                                            }
+                                                            dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
+                                                            page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage
+                                                        }
+                                                    }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                                                }
                                             }
                                             if (selectedTitle.type == "tv") {
                                                 Spacer(Modifier.height(8.dp))
@@ -936,33 +949,33 @@ class MainActivity : ComponentActivity() {
                                         Text("Gênero: não aplicado à coleção pessoal.", color = Muted, fontSize = 10.sp)
                                     }
                                     val wheelItems = (if (rouletteMode == "LIST") options else rouletteCarouselItems).take(8)
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(278.dp)) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(350.dp)) {
                                         Text("▼", color = Color(0xFFFFD27A), fontSize = 25.sp, fontWeight = FontWeight.Black,
                                             modifier = Modifier.align(Alignment.TopCenter))
                                         Box(
-                                            modifier = Modifier.size(250.dp).graphicsLayer {
+                                            modifier = Modifier.size(320.dp).graphicsLayer {
                                                 rotationZ = rouletteWheelRotation.value
                                             },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Box(Modifier.size(92.dp).background(Color(0xFF302044), RoundedCornerShape(50)).padding(8.dp),
+                                            Box(Modifier.size(112.dp).background(Color(0xFF302044), RoundedCornerShape(50)).padding(8.dp),
                                                 contentAlignment = Alignment.Center) {
                                                 Text("CINE\nVERSE", color = Color(0xFFFFD27A), fontSize = 13.sp,
                                                     fontWeight = FontWeight.Black, lineHeight = 15.sp)
                                             }
                                             wheelItems.forEachIndexed { index, poster ->
                                                 val angle = (index * (360f / maxOf(wheelItems.size, 1)) - 90f) * (Math.PI / 180.0)
-                                                val dx = (78.0 * kotlin.math.cos(angle)).toFloat()
-                                                val dy = (78.0 * kotlin.math.sin(angle)).toFloat()
+                                                val dx = (108.0 * kotlin.math.cos(angle)).toFloat()
+                                                val dy = (108.0 * kotlin.math.sin(angle)).toFloat()
                                                 Column(
-                                                    modifier = Modifier.offset(x = dx.dp, y = dy.dp).width(66.dp)
+                                                    modifier = Modifier.offset(x = dx.dp, y = dy.dp).width(86.dp)
                                                         .background(Color(0xFF211A2D), RoundedCornerShape(7.dp)).padding(3.dp),
                                                     horizontalAlignment = Alignment.CenterHorizontally
                                                 ) {
                                                     AsyncImage(
                                                         model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w185$it" },
                                                         contentDescription = poster.title,
-                                                        modifier = Modifier.fillMaxWidth().height(88.dp)
+                                                        modifier = Modifier.fillMaxWidth().height(112.dp)
                                                             .background(Color(0xFF14263A), RoundedCornerShape(5.dp)),
                                                         contentScale = ContentScale.Crop
                                                     )
@@ -1105,7 +1118,7 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
 
 
 @Composable
-private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, inList: Boolean = false, onToggleList: () -> Unit = {}, onOpen: () -> Unit) {
+private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!item.posterPath.isNullOrBlank()) {
             AsyncImage(
@@ -1121,7 +1134,6 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, in
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
-        ListToggleButton(inList, onToggleList)
     }
 }
 @Composable
@@ -1159,7 +1171,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
 }
 
 @Composable
-private fun RecommendationCard(item: TmdbResult, inList: Boolean = false, onToggleList: () -> Unit = {}, onOpen: () -> Unit) {
+private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
     Column(Modifier.width(116.dp).clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!item.posterPath.isNullOrBlank()) {
             AsyncImage(model = "https://image.tmdb.org/t/p/w342" + item.posterPath, contentDescription = item.title, modifier = Modifier.fillMaxWidth().height(166.dp))
@@ -1175,7 +1187,7 @@ private fun RecommendationCard(item: TmdbResult, inList: Boolean = false, onTogg
 }
 
 @Composable
-private fun SearchCard(item: TmdbResult, inList: Boolean = false, onToggleList: () -> Unit = {}, onOpen: () -> Unit) {
+private fun SearchCard(item: TmdbResult, onOpen: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).clickable(onClick = onOpen).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         if (!item.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w185${item.posterPath}", contentDescription = item.title, modifier = Modifier.width(58.dp).height(84.dp))
         Spacer(Modifier.width(10.dp))
@@ -1186,7 +1198,6 @@ private fun SearchCard(item: TmdbResult, inList: Boolean = false, onToggleList: 
         }
         Column(horizontalAlignment = Alignment.End) {
             Text("Detalhes", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            ListToggleButton(inList, onToggleList)
         }
     }
 }
