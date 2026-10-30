@@ -127,7 +127,13 @@ class MainActivity : ComponentActivity() {
                     "SÉRIES" -> media.mediaType == "tv"
                     else -> true
                 }
-                (yearFilter == "Todos" || media.year == yearFilter) && categoryMatches
+                val statusMatches = when (filter) {
+                    "Quero assistir" -> media.status == "WATCHLIST" || (media.mediaType == "movie" && media.status == "WATCHING")
+                    "Tô assistindo" -> media.mediaType == "tv" && media.status == "WATCHING"
+                    "Já assisti" -> media.status == "WATCHED"
+                    else -> true
+                }
+                (yearFilter == "Todos" || media.year == yearFilter) && categoryMatches && statusMatches
             }
             val visible = when (sortMode) {
                 "A–Z" -> visibleUnsorted.sortedBy { it.title.lowercase(java.util.Locale.ROOT) }
@@ -292,6 +298,15 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             "Minha lista" -> {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                                    items(listOf("Quero assistir", "Tô assistindo", "Já assisti")) { statusOption ->
+                                        FilterChip(
+                                            selected = filter == statusOption,
+                                            onClick = { filter = statusOption },
+                                            label = { Text(statusOption, fontSize = 11.sp) }
+                                        )
+                                    }
+                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                                     Text("Categoria:", color = Muted, fontSize = 12.sp)
                                     listOf("FILMES", "SÉRIES").forEach { item -> FilterChip(selected = categoryFilter == item, onClick = { categoryFilter = item; yearFilter = "Todos" }, label = { Text(item, fontSize = 11.sp) }) }
