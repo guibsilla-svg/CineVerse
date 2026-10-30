@@ -276,12 +276,27 @@ class MainActivity : ComponentActivity() {
                                                         if (season.optInt("number") == 0) continue
                                                         var seasonMenu by remember(season.optInt("number")) { mutableStateOf(false) }
                                                         val seasonStatus = season.optString("status", "WATCHLIST")
-                                                        val seasonLabel = when (seasonStatus) { "WATCHED" -> "Já assisti"; "WATCHING" -> "Tô assistindo"; else -> "Quero assistir" }
+                                                        val seasonLabel = when (seasonStatus) { "WATCHED" -> "JÁ ASSISTIDA"; "WATCHING" -> "EM ANDAMENTO"; else -> "QUERO ASSISTIR" }
+                                                        val seasonAccent = when (seasonStatus) {
+                                                            "WATCHED" -> Color(0xFF65D6A2)
+                                                            "WATCHING" -> Color(0xFFC29AFF)
+                                                            else -> Muted
+                                                        }
+                                                        val seasonBackground = when (seasonStatus) {
+                                                            "WATCHED" -> Color(0xFF15352D)
+                                                            "WATCHING" -> Color(0xFF2A2040)
+                                                            else -> Panel
+                                                        }
                                                         Box(Modifier.fillMaxWidth()) {
-                                                            OutlinedButton(onClick = { seasonMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                                                                Column(Modifier.fillMaxWidth()) {
-                                                                    Text(season.optString("name"), color = TextMain, fontWeight = FontWeight.SemiBold)
-                                                                    Text("${season.optInt("episodes")} episódios • ${season.optString("airDate")} • $seasonLabel", color = Muted, fontSize = 11.sp)
+                                                            OutlinedButton(
+                                                                onClick = { seasonMenu = true },
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                colors = ButtonDefaults.outlinedButtonColors(containerColor = seasonBackground)
+                                                            ) {
+                                                                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                                    Text(season.optString("name"), color = TextMain, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                                    Text("${season.optInt("episodes")} episódios • ${season.optString("airDate")}", color = Muted, fontSize = 11.sp)
+                                                                    Text(seasonLabel, color = seasonAccent, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp)
                                                                 }
                                                             }
                                                             DropdownMenu(expanded = seasonMenu, onDismissRequest = { seasonMenu = false }) {
