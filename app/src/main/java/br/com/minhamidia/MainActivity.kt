@@ -307,8 +307,6 @@ class MainActivity : ComponentActivity() {
                             .onFailure { exploreError = it.message ?: "Não foi possível pesquisar os títulos." }
                         exploreLoading = false
                     }
-                } else if (page == "Explorar" && exploreQuery.isBlank()) {
-                    exploreResults = emptyList()
                 }
             }
             LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey, exploreQuery) {
