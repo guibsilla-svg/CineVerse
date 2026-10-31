@@ -204,42 +204,81 @@ class MainActivity : ComponentActivity() {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
                     recommendationsError = ""
-                    recommendedMovies = emptyList()
-                    recommendedShows = emptyList()
+                    val now = System.currentTimeMillis()
+                    val lastUpdate = prefs.getLong("trending_last_update", 0L)
+                    val cachedMovies = prefs.getString("trending_movies_cache", null)
+                    val cachedShows = prefs.getString("trending_shows_cache", null)
+                    val cacheValid = now - lastUpdate < TimeUnit.HOURS.toMillis(24) &&
+                        !cachedMovies.isNullOrBlank() && !cachedShows.isNullOrBlank()
 
-                    val movieResult = runCatching {
-                        val trending = TmdbClient.trendingMovies(apiKey).filter { it.posterPath != null }
-                        if (trending.isNotEmpty()) trending else TmdbClient.popularMovies(apiKey).filter { it.posterPath != null }
-                    }
-                    val showResult = runCatching {
-                        val trending = TmdbClient.trendingShows(apiKey).filter { it.posterPath != null }
-                        if (trending.isNotEmpty()) trending else TmdbClient.popularShows(apiKey).filter { it.posterPath != null }
-                    }
+                    fun decodeCache(json: String?): List<TmdbResult> = runCatching {
+                        val array = JSONArray(json ?: "[]")
+                        (0 until array.length()).mapNotNull { index ->
+                            val item = array.optJSONObject(index) ?: return@mapNotNull null
+                            TmdbResult(
+                                id = item.optInt("id"),
+                                title = item.optString("title"),
+                                type = item.optString("type"),
+                                year = item.optString("year"),
+                                posterPath = item.optString("posterPath").takeIf { it.isNotBlank() && it != "null" },
+                                overview = item.optString("overview"),
+                                releaseDate = item.optString("releaseDate")
+                            )
+                        }
+                    }.getOrDefault(emptyList())
 
-                    val tasteProfile = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
-                    fun personalized(items: List<TmdbResult>, mediaType: String): List<TmdbResult> {
-                        if (homeOrder == "Descobertas primeiro" || tasteProfile.isEmpty()) return items.take(12)
-                        val profile = tasteProfile.filter { it.mediaType == mediaType }
-                        if (profile.isEmpty()) return items.take(12)
-                        val tokens = profile.flatMap { (it.title + " " + it.overview + " " + it.genres).lowercase().split(Regex("[^\\p{L}\\p{N}]+")) }
-                            .filter { it.length >= 4 }.groupingBy { it }.eachCount()
-                        return items.sortedByDescending { candidate ->
-                            val text = (candidate.title + " " + candidate.overview).lowercase()
-                            tokens.entries.sumOf { (word, weight) -> if (text.contains(word)) weight * 2 else 0 } +
-                                if (profile.any { it.title.equals(candidate.title, ignoreCase = true) }) -100 else 0
-                        }.take(12)
-                    }
-                    recommendedMovies = personalized(movieResult.getOrDefault(emptyList()), "movie")
-                    recommendedShows = personalized(showResult.getOrDefault(emptyList()), "tv")
+                    if (cacheValid) {
+                        recommendedMovies = decodeCache(cachedMovies)
+                        recommendedShows = decodeCache(cachedShows)
+                    } else {
+                        recommendedMovies = emptyList()
+                        recommendedShows = emptyList()
+                        val movieResult = runCatching {
+                            val trending = TmdbClient.trendingMovies(apiKey).filter { it.posterPath != null }
+                            if (trending.isNotEmpty()) trending else TmdbClient.popularMovies(apiKey).filter { it.posterPath != null }
+                        }
+                        val showResult = runCatching {
+                            val trending = TmdbClient.trendingShows(apiKey).filter { it.posterPath != null }
+                            if (trending.isNotEmpty()) trending else TmdbClient.popularShows(apiKey).filter { it.posterPath != null }
+                        }
 
-                    val errors = listOfNotNull(
-                        movieResult.exceptionOrNull()?.message?.let { "Filmes: $it" },
-                        showResult.exceptionOrNull()?.message?.let { "Séries: $it" }
-                    )
-                    recommendationsError = when {
-                        recommendedMovies.isEmpty() && recommendedShows.isEmpty() ->
+                        val tasteProfile = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
+                        fun personalized(items: List<TmdbResult>, mediaType: String): List<TmdbResult> {
+                            if (homeOrder == "Descobertas primeiro" || tasteProfile.isEmpty()) return items.take(12)
+                            val profile = tasteProfile.filter { it.mediaType == mediaType }
+                            if (profile.isEmpty()) return items.take(12)
+                            val tokens = profile.flatMap { (it.title + " " + it.overview + " " + it.genres).lowercase().split(Regex("[^\\p{L}\\p{N}]+")) }
+                                .filter { it.length >= 4 }.groupingBy { it }.eachCount()
+                            return items.sortedByDescending { candidate ->
+                                val text = (candidate.title + " " + candidate.overview).lowercase()
+                                tokens.entries.sumOf { (word, weight) -> if (text.contains(word)) weight * 2 else 0 } +
+                                    if (profile.any { it.title.equals(candidate.title, ignoreCase = true) }) -100 else 0
+                            }.take(12)
+                        }
+                        recommendedMovies = personalized(movieResult.getOrDefault(emptyList()), "movie")
+                        recommendedShows = personalized(showResult.getOrDefault(emptyList()), "tv")
+
+                        fun encodeCache(items: List<TmdbResult>) = JSONArray().apply {
+                            items.forEach { item ->
+                                put(JSONObject().put("id", item.id).put("title", item.title).put("type", item.type)
+                                    .put("year", item.year).put("posterPath", item.posterPath)
+                                    .put("overview", item.overview).put("releaseDate", item.releaseDate))
+                            }
+                        }.toString()
+                        if (recommendedMovies.isNotEmpty() || recommendedShows.isNotEmpty()) {
+                            prefs.edit()
+                                .putString("trending_movies_cache", encodeCache(recommendedMovies))
+                                .putString("trending_shows_cache", encodeCache(recommendedShows))
+                                .putLong("trending_last_update", now)
+                                .apply()
+                        }
+                        val errors = listOfNotNull(
+                            movieResult.exceptionOrNull()?.message?.let { "Filmes: $it" },
+                            showResult.exceptionOrNull()?.message?.let { "Séries: $it" }
+                        )
+                        recommendationsError = if (recommendedMovies.isEmpty() && recommendedShows.isEmpty())
                             errors.joinToString(" • ").ifBlank { "O TMDB não retornou títulos com pôsteres." }
-                        else -> errors.joinToString(" • ")
+                        else errors.joinToString(" • ")
                     }
                     recommendationsLoading = false
                 } else {
