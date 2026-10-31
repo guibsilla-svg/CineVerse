@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.items
@@ -167,6 +168,9 @@ class MainActivity : ComponentActivity() {
             var exploreLoading by remember { mutableStateOf(false) }
             var exploreError by remember { mutableStateOf("") }
             var exploreCanLoadMore by remember { mutableStateOf(true) }
+            var exploreSearchLoadedKey by remember { mutableStateOf("") }
+            var exploreCatalogLoadedKey by remember { mutableStateOf("") }
+            val exploreListState = rememberLazyListState()
             val rouletteWheelRotation = remember { Animatable(0f) }
             val rouletteScope = rememberCoroutineScope()
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
@@ -289,7 +293,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(page, exploreQuery, exploreType, apiKey) {
-                if (page == "Explorar" && exploreQuery.trim().isNotEmpty()) {
+                val searchKey = "${exploreQuery.trim()}|$exploreType|$apiKey"
+                if (page == "Explorar" && exploreQuery.trim().isNotEmpty() && exploreSearchLoadedKey != searchKey) {
                     kotlinx.coroutines.delay(450)
                     if (apiKey.isBlank()) {
                         exploreError = "Configure sua credencial TMDB em Mais > Config."
@@ -298,7 +303,7 @@ class MainActivity : ComponentActivity() {
                         exploreLoading = true
                         exploreError = ""
                         runCatching { TmdbClient.search(exploreQuery.trim(), apiKey).filter { it.type == exploreType && it.posterPath != null } }
-                            .onSuccess { items -> exploreResults = items; exploreCanLoadMore = false; explorePage = 1 }
+                            .onSuccess { items -> exploreResults = items; exploreCanLoadMore = false; explorePage = 1; exploreSearchLoadedKey = searchKey }
                             .onFailure { exploreError = it.message ?: "Não foi possível pesquisar os títulos." }
                         exploreLoading = false
                     }
@@ -307,7 +312,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey, exploreQuery) {
-                if (page == "Explorar" && exploreQuery.isBlank()) {
+                val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$apiKey"
+                if (page == "Explorar" && exploreQuery.isBlank() && exploreCatalogLoadedKey != catalogKey) {
                     explorePage = 1
                     exploreResults = emptyList()
                     exploreError = ""
@@ -317,7 +323,7 @@ class MainActivity : ComponentActivity() {
                         exploreLoading = true
                         val genreId = if (exploreGenre == "Todos") null else exploreGenres(exploreType).firstOrNull { it.first == exploreGenre }?.second
                         runCatching { TmdbClient.catalog(exploreType, exploreCategory, 1, genreId, apiKey).filter { it.posterPath != null } }
-                            .onSuccess { items -> exploreResults = items; exploreCanLoadMore = items.size >= 20 }
+                            .onSuccess { items -> exploreResults = items; exploreCanLoadMore = items.size >= 20; exploreCatalogLoadedKey = catalogKey }
                             .onFailure { exploreError = it.message ?: "Não foi possível carregar o catálogo." }
                         exploreLoading = false
                     }
@@ -438,7 +444,7 @@ class MainActivity : ComponentActivity() {
                                     } else if (exploreError.isNotBlank() && exploreResults.isEmpty()) {
                                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(exploreError, color = Muted) }
                                     } else {
-                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                        LazyColumn(state = exploreListState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                             items(exploreResults.chunked(3), key = { row -> "explore-" + (row.firstOrNull()?.id ?: 0) }) { rowItems ->
                                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                                     rowItems.forEach { item ->
