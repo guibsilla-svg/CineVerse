@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -40,7 +39,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -49,8 +47,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import br.com.minhamidia.data.AppDatabase
@@ -1006,7 +1002,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                                if (showRouletteDialog) {
+                if (showRouletteDialog) {
                     val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null && (rouletteYear == "Todos" || it.year == rouletteYear) }
                         .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate) }
                     val options = if (rouletteMode == "LIST") collectionOptions else emptyList()
@@ -1106,28 +1102,71 @@ class MainActivity : ComponentActivity() {
                                         Text("Gênero: não aplicado à coleção pessoal.", color = Muted, fontSize = 10.sp)
                                     }
                                     val wheelItems = (if (rouletteMode == "LIST") options else rouletteCarouselItems).take(8)
-                                    Box(Modifier.fillMaxWidth().height(350.dp).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Color(0xFF090812)), contentAlignment = Alignment.BottomCenter) {
-                                        Canvas(Modifier.fillMaxWidth().height(175.dp).align(Alignment.TopCenter)) {
-                                            val arcSize = androidx.compose.ui.geometry.Size(size.width * 1.18f, size.height * 1.72f)
-                                            val arcTop = Offset(-size.width * .09f, -size.height * .62f)
-                                            drawArc(Color(0xFF28233A), 180f, 180f, false, arcTop, arcSize, style = Stroke(24.dp.toPx()))
-                                            drawArc(Color(0xFF6D5B9C), 180f, 180f, false, arcTop, arcSize, style = Stroke(3.dp.toPx()))
-                                            for (i in 0..10) { val x = size.width * i / 10f; drawCircle(Color(0xFFFFD58A), 5.dp.toPx(), Offset(x, size.height * .79f)) }
-                                        }
-                                        if (wheelItems.isNotEmpty()) Row(Modifier.fillMaxWidth().height(300.dp).align(Alignment.BottomCenter).graphicsLayer { rotationZ = rouletteWheelRotation.value }.horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-                                            wheelItems.forEachIndexed { index, poster ->
-                                                val center = (wheelItems.size - 1) / 2f
-                                                val distance = kotlin.math.abs(index - center)
-                                                Column(Modifier.width(112.dp).offset(y = (distance * 20f).dp).graphicsLayer { rotationY = (center - index) * 10f; rotationZ = (index - center) * 2f; cameraDistance = 20f * density; scaleX = 1f - distance * .035f; scaleY = 1f - distance * .035f }.clip(RoundedCornerShape(15.dp)).background(Color(0xFF29234B)).border(1.dp, Color(0xFF7866BD), RoundedCornerShape(15.dp)).clickable(enabled = !rouletteSpinning) { rouletteSuggestion = poster }.padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    AsyncImage(model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = poster.title, modifier = Modifier.fillMaxWidth().height(164.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF171426)), contentScale = ContentScale.Crop)
-                                                    Text(poster.title, color = Color.White, fontSize = 9.sp, maxLines = 1, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(350.dp)) {
+                                        Box(Modifier.size(320.dp), contentAlignment = Alignment.Center) {
+                                            Canvas(Modifier.fillMaxSize()) {
+                                                val colors = listOf(
+                                                    Color(0xFF302044), Color(0xFF21182F), Color(0xFF3A2452), Color(0xFF241B35),
+                                                    Color(0xFF342044), Color(0xFF20182D), Color(0xFF39234D), Color(0xFF251A38)
+                                                )
+                                                val diameter = size.minDimension
+                                                val inset = 5.dp.toPx()
+                                                colors.forEachIndexed { index, color ->
+                                                    drawArc(color, -112.5f + index * 45f, 43f, true,
+                                                        topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                                                        size = androidx.compose.ui.geometry.Size(diameter - inset * 2, diameter - inset * 2))
+                                                }
+                                                drawCircle(Color(0xFFB77AFF), radius = diameter / 2 - 2.dp.toPx(), style = Stroke(3.dp.toPx()))
+                                                drawCircle(Color(0xFF6E4A91), radius = diameter * .31f, style = Stroke(2.dp.toPx()))
+                                                drawCircle(Color(0xFF1A1324), radius = diameter * .245f)
+                                            }
+                                            Box(Modifier.size(320.dp).graphicsLayer { rotationZ = rouletteWheelRotation.value },
+                                                contentAlignment = Alignment.Center) {
+                                                wheelItems.forEachIndexed { index, poster ->
+                                                    val angle = (index * (360f / maxOf(wheelItems.size, 1)) - 90f) * (Math.PI / 180.0)
+                                                    val dx = (108.0 * kotlin.math.cos(angle)).toFloat()
+                                                    val dy = (108.0 * kotlin.math.sin(angle)).toFloat()
+                                                    Column(
+                                                        modifier = Modifier.offset(x = dx.dp, y = dy.dp).width(76.dp)
+                                                            .background(Color(0xFF17111F), RoundedCornerShape(9.dp))
+                                                            .padding(3.dp),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w185$it" },
+                                                            contentDescription = poster.title,
+                                                            modifier = Modifier.fillMaxWidth().height(104.dp)
+                                                                .background(Color(0xFF14263A), RoundedCornerShape(6.dp)),
+                                                            contentScale = ContentScale.Crop
+                                                        )
+                                                        Text(poster.title, color = Color.White, fontSize = 7.sp,
+                                                            maxLines = 1, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                             }
-                                        } else Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("✦", color = Color(0xFFFFD58A), fontSize = 30.sp)
-                                            Text(if (rouletteMode == "LIST") "Adicione títulos à sua lista" else "Gire para descobrir títulos", color = Muted, fontSize = 10.sp)
+                                            Box(
+                                                Modifier.size(112.dp)
+                                                    .background(Color(0xFF130E1B), RoundedCornerShape(56.dp))
+                                                    .padding(5.dp)
+                                                    .background(Color(0xFF302044), RoundedCornerShape(56.dp))
+                                                    .clickable(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty())) {
+                                                        startRoulette()
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                androidx.compose.foundation.Image(
+                                                    painter = painterResource(id = R.drawable.cineverse_logo_horizontal),
+                                                    contentDescription = "Girar roleta CineVerso",
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 9.dp).height(42.dp)
+                                                )
+                                            }
                                         }
-                                        Box(Modifier.align(Alignment.TopCenter).padding(top = 2.dp).size(30.dp).background(Color(0xFF39334D), RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)), contentAlignment = Alignment.Center) { Text("▼", color = Color(0xFFFFD58A), fontSize = 13.sp, fontWeight = FontWeight.Black) }
+                                        if (wheelItems.isEmpty()) Text(
+                                            if (rouletteMode == "LIST") "Adicione títulos à sua lista" else "Gire para descobrir um título",
+                                            color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 1.dp)
+                                        )
                                     }
                                     Text(if (rouletteSpinning) "A sorte está sendo lançada..." else "Toque em GIRAR e deixe a roleta decidir!", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     if (rouletteError.isNotBlank()) Text(rouletteError, color = Color(0xFFFF8A8A), fontSize = 11.sp)
