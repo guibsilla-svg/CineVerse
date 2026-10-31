@@ -1004,7 +1004,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                if (showRouletteDialog) {
+                                if (showRouletteDialog) {
                     val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null && (rouletteYear == "Todos" || it.year == rouletteYear) }
                         .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate) }
                     val options = if (rouletteMode == "LIST") collectionOptions else emptyList()
@@ -1103,82 +1103,29 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         Text("Gênero: não aplicado à coleção pessoal.", color = Muted, fontSize = 10.sp)
                                     }
-                                    val wheelItems = (if (rouletteMode == "LIST") options else rouletteCarouselItems).take(7)
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().height(365.dp)
-                                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                                            .background(Color(0xFF090812)),
-                                        contentAlignment = Alignment.BottomCenter
-                                    ) {
-                                        Canvas(Modifier.fillMaxWidth().height(190.dp).align(Alignment.TopCenter)) {
+                                    val wheelItems = (if (rouletteMode == "LIST") options else rouletteCarouselItems).take(8)
+                                    Box(Modifier.fillMaxWidth().height(350.dp).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Color(0xFF090812)), contentAlignment = Alignment.BottomCenter) {
+                                        Canvas(Modifier.fillMaxWidth().height(175.dp).align(Alignment.TopCenter)) {
                                             val arcSize = androidx.compose.ui.geometry.Size(size.width * 1.18f, size.height * 1.72f)
                                             val arcTop = Offset(-size.width * .09f, -size.height * .62f)
                                             drawArc(Color(0xFF28233A), 180f, 180f, false, arcTop, arcSize, style = Stroke(24.dp.toPx()))
                                             drawArc(Color(0xFF6D5B9C), 180f, 180f, false, arcTop, arcSize, style = Stroke(3.dp.toPx()))
-                                            drawArc(Color(0xFFAAA0D6), 180f, 180f, false, Offset(arcTop.x, arcTop.y + 9.dp.toPx()), arcSize, style = Stroke(1.dp.toPx()))
-                                            for (i in 0..10) {
-                                                val x = size.width * i / 10f
-                                                drawCircle(Color(0xFFFFD58A), 5.dp.toPx(), Offset(x, size.height * .79f))
-                                                drawCircle(Color(0x55FFD58A), 10.dp.toPx(), Offset(x, size.height * .79f), style = Stroke(1.dp.toPx()))
-                                            }
+                                            for (i in 0..10) { val x = size.width * i / 10f; drawCircle(Color(0xFFFFD58A), 5.dp.toPx(), Offset(x, size.height * .79f)) }
                                         }
-                                        if (wheelItems.isNotEmpty()) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().height(315.dp)
-                                                    .align(Alignment.BottomCenter)
-                                                    .graphicsLayer { rotationZ = rouletteWheelRotation.value }
-                                                    .horizontalScroll(rememberScrollState())
-                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                verticalAlignment = Alignment.Bottom
-                                            ) {
-                                                wheelItems.forEachIndexed { index, poster ->
-                                                    val center = (wheelItems.size - 1) / 2f
-                                                    val distance = kotlin.math.abs(index - center)
-                                                    Column(
-                                                        modifier = Modifier.width(116.dp)
-                                                            .offset(y = (distance * 23f).dp)
-                                                            .graphicsLayer {
-                                                                rotationY = (center - index) * 10f
-                                                                rotationZ = (index - center) * 2.2f
-                                                                cameraDistance = 20f * density
-                                                                scaleX = 1f - distance * .035f
-                                                                scaleY = 1f - distance * .035f
-                                                            }
-                                                            .clip(RoundedCornerShape(15.dp))
-                                                            .background(Color(0xFF29234B))
-                                                            .border(1.dp, Color(0xFF7866BD), RoundedCornerShape(15.dp))
-                                                            .clickable(enabled = !rouletteSpinning) { rouletteSuggestion = poster }
-                                                            .padding(5.dp),
-                                                        horizontalAlignment = Alignment.CenterHorizontally
-                                                    ) {
-                                                        AsyncImage(
-                                                            model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
-                                                            contentDescription = poster.title,
-                                                            modifier = Modifier.fillMaxWidth().height(174.dp)
-                                                                .clip(RoundedCornerShape(10.dp))
-                                                                .background(Color(0xFF171426)),
-                                                            contentScale = ContentScale.Crop
-                                                        )
-                                                        Text(poster.title, color = Color.White, fontSize = 9.sp,
-                                                            maxLines = 1, fontWeight = FontWeight.Bold,
-                                                            modifier = Modifier.padding(top = 5.dp))
-                                                    }
+                                        if (wheelItems.isNotEmpty()) Row(Modifier.fillMaxWidth().height(300.dp).align(Alignment.BottomCenter).graphicsLayer { rotationZ = rouletteWheelRotation.value }.horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                                            wheelItems.forEachIndexed { index, poster ->
+                                                val center = (wheelItems.size - 1) / 2f
+                                                val distance = kotlin.math.abs(index - center)
+                                                Column(Modifier.width(112.dp).offset(y = (distance * 20f).dp).graphicsLayer { rotationY = (center - index) * 10f; rotationZ = (index - center) * 2f; cameraDistance = 20f * density; scaleX = 1f - distance * .035f; scaleY = 1f - distance * .035f }.clip(RoundedCornerShape(15.dp)).background(Color(0xFF29234B)).border(1.dp, Color(0xFF7866BD), RoundedCornerShape(15.dp)).clickable(enabled = !rouletteSpinning) { rouletteSuggestion = poster }.padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    AsyncImage(model = poster.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = poster.title, modifier = Modifier.fillMaxWidth().height(164.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF171426)), contentScale = ContentScale.Crop)
+                                                    Text(poster.title, color = Color.White, fontSize = 9.sp, maxLines = 1, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
                                                 }
                                             }
-                                        } else {
-                                            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("✦", color = Color(0xFFFFD58A), fontSize = 30.sp)
-                                                Text(if (rouletteMode == "LIST") "Adicione títulos à sua lista" else "Gire para descobrir títulos",
-                                                    color = Muted, fontSize = 10.sp)
-                                            }
+                                        } else Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("✦", color = Color(0xFFFFD58A), fontSize = 30.sp)
+                                            Text(if (rouletteMode == "LIST") "Adicione títulos à sua lista" else "Gire para descobrir títulos", color = Muted, fontSize = 10.sp)
                                         }
-                                        Box(
-                                            Modifier.align(Alignment.TopCenter).padding(top = 2.dp)
-                                                .size(30.dp).background(Color(0xFF39334D),
-                                                    RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) { Text("▼", color = Color(0xFFFFD58A), fontSize = 13.sp, fontWeight = FontWeight.Black) }
+                                        Box(Modifier.align(Alignment.TopCenter).padding(top = 2.dp).size(30.dp).background(Color(0xFF39334D), RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)), contentAlignment = Alignment.Center) { Text("▼", color = Color(0xFFFFD58A), fontSize = 13.sp, fontWeight = FontWeight.Black) }
                                     }
                                     Text(if (rouletteSpinning) "A sorte está sendo lançada..." else "Toque em GIRAR e deixe a roleta decidir!", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     if (rouletteError.isNotBlank()) Text(rouletteError, color = Color(0xFFFF8A8A), fontSize = 11.sp)
@@ -1200,7 +1147,22 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }) { Text("Ver detalhes") }
                             } else {
-                                TextButton(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty()),if (editingSeries != null) {
+                                TextButton(enabled = !rouletteSpinning && (rouletteMode == "DISCOVER" || options.isNotEmpty()), onClick = {
+                                    startRoulette()
+                                }) { Text(if (rouletteSpinning) "Girando..." else "GIRAR A ROLETA") }
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                if (!rouletteSpinning) {
+                                    if (rouletteSuggestion != null) rouletteSuggestion = null else showRouletteDialog = false
+                                }
+                            }) { Text(if (rouletteSuggestion != null && !rouletteSpinning) "Sortear novamente" else "Fechar") }
+                        },
+                        containerColor = Panel
+                    )
+                }
+                                if (editingSeries != null) {
                     val series = editingSeries!!
                     AlertDialog(onDismissRequest = { editingSeries = null },
                         title = { Text("Progresso da série") },
