@@ -312,7 +312,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey, exploreQuery) {
-                val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$apiKey"
+                val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$apiKey|${exploreQuery.trim()}"
                 if (page == "Explorar" && exploreQuery.isBlank() && exploreCatalogLoadedKey != catalogKey) {
                     explorePage = 1
                     exploreResults = emptyList()
