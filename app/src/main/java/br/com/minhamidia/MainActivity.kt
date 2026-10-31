@@ -912,7 +912,14 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Box(Modifier.weight(1f)) { StatCard("Na coleção", all.size.toString(), "Títulos salvos") }
+                                    Box(Modifier.weight(1f)) {
+                                        Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(16.dp)) {
+                                            Text("NA COLEÇÃO", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                            Text(all.size.toString(), color = Purple, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                                            Text("${all.count { it.mediaType == "movie" }} filmes", color = Muted, fontSize = 11.sp)
+                                            Text("${all.count { it.mediaType == "tv" }} séries", color = Muted, fontSize = 11.sp)
+                                        }
+                                    }
                                     Box(Modifier.weight(1f)) { StatCard("Assistindo", all.count { it.mediaType == "tv" && it.status == "WATCHING" }.toString(), "Séries em andamento") }
                                 }
                                 Spacer(Modifier.height(14.dp))
