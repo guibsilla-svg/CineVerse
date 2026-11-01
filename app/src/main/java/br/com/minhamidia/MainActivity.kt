@@ -246,14 +246,19 @@ class MainActivity : ComponentActivity() {
                         val rating = when {
                             cachedRating > 0.0 -> cachedRating
                             isFresh -> 0.0
-                            else -> runCatching {
-                                TmdbClient.imdbRating(target.id, target.title, target.year, target.type, apiKey, imdbApiKey)
-                            }.getOrElse { error ->
-                                if (error.message?.contains("Chave OMDb inválida", true) == true) throw error
-                                0.0
-                            }.also {
-                                prefs.edit().putLong(checkedKey, System.currentTimeMillis())
-                                    .putFloat(cacheKey, it.toFloat()).apply()
+                            else -> {
+                                val lookup = runCatching {
+                                    TmdbClient.imdbRating(target.id, target.title, target.year, target.type, apiKey, imdbApiKey)
+                                }
+                                lookup.exceptionOrNull()?.let { error ->
+                                    imdbStatus = error.message ?: "Falha ao consultar as notas IMDb."
+                                }
+                                lookup.getOrDefault(0.0).also { value ->
+                                    if (lookup.isSuccess) {
+                                        prefs.edit().putLong(checkedKey, System.currentTimeMillis())
+                                            .putFloat(cacheKey, value.toFloat()).apply()
+                                    }
+                                }
                             }
                         }
                         if (rating > 0.0) {
