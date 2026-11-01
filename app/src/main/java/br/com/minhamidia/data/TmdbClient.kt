@@ -104,6 +104,20 @@ object TmdbClient {
         return TmdbTrailer(selected.optString("key"), selected.optString("name"), selected.optString("iso_639_1"))
     }
 
+    suspend fun imageBackdrops(id: Int, type: String, credential: String): List<String> {
+        val endpoint = if (type == "tv") "tv" else "movie"
+        val images = requestObject("/$endpoint/$id/images", credential, mapOf(
+            "include_image_language" to "pt,null"
+        )).optJSONArray("backdrops") ?: return emptyList()
+        return buildList {
+            for (i in 0 until images.length()) {
+                val path = images.optJSONObject(i)?.optString("file_path").orEmpty()
+                if (path.startsWith("/") && !contains(path)) add(path)
+                if (size == 3) break
+            }
+        }
+    }
+
     suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
 
