@@ -158,14 +158,29 @@ object TmdbClient {
             fun rating(json: JSONObject): Double =
                 json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.1..10.0 } ?: 0.0
 
-            val imdbId = runCatching {
+            var lastOmdbError = ""
+            fun rememberOmdbError(error: Throwable) {
+                val message = error.message.orEmpty()
+                if (message.contains("Invalid API key", true) ||
+                    message.contains("Too many requests", true) ||
+                    message.contains("Request limit", true)) {
+                    throw IllegalStateException(message)
+                }
+                if (message.isNotBlank()) lastOmdbError = message
+            }
+
+            val imdbId = try {
                 requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap())
                     .optString("imdb_id").takeIf { it.startsWith("tt") }
-            }.getOrNull()
+            } catch (_: Exception) { null }
 
             if (!imdbId.isNullOrBlank()) {
-                val byId = runCatching { rating(omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8")))) }
-                    .getOrDefault(0.0)
+                val byId = try {
+                    rating(omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8"))))
+                } catch (error: Exception) {
+                    rememberOmdbError(error)
+                    0.0
+                }
                 if (byId > 0.0) return@withContext byId
             }
 
@@ -175,8 +190,17 @@ object TmdbClient {
             // Search tolera títulos alternativos/localizados, ao contrário da consulta estrita t=.
             val searchParams = mutableListOf("s=$encodedTitle", "type=$typeParam")
             if (year.length >= 4) searchParams.add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
-            val search = runCatching { omdb(searchParams) }.getOrNull()
-                ?: runCatching { omdb(listOf("s=$encodedTitle", "type=$typeParam")) }.getOrNull()
+            val search = try {
+                omdb(searchParams)
+            } catch (firstError: Exception) {
+                rememberOmdbError(firstError)
+                try {
+                    omdb(listOf("s=$encodedTitle", "type=$typeParam"))
+                } catch (secondError: Exception) {
+                    rememberOmdbError(secondError)
+                    null
+                }
+            }
 
             if (search != null) {
                 val entries = search.optJSONArray("Search")
@@ -196,9 +220,12 @@ object TmdbClient {
                         })
                     for (candidate in candidates) {
                         val candidateId = candidate.optString("imdbID")
-                        val value = runCatching {
+                        val value = try {
                             rating(omdb(listOf("i=" + URLEncoder.encode(candidateId, "UTF-8"))))
-                        }.getOrDefault(0.0)
+                        } catch (error: Exception) {
+                            rememberOmdbError(error)
+                            0.0
+                        }
                         if (value > 0.0) return@withContext value
                     }
                 }
@@ -211,8 +238,16 @@ object TmdbClient {
                 add(listOf("t=$encodedTitle"))
             }
             for (params in directAttempts) {
-                val value = runCatching { rating(omdb(params)) }.getOrDefault(0.0)
+                val value = try {
+                    rating(omdb(params))
+                } catch (error: Exception) {
+                    rememberOmdbError(error)
+                    0.0
+                }
                 if (value > 0.0) return@withContext value
+            }
+            if (lastOmdbError.isNotBlank()) {
+                throw IllegalStateException("Falha na consulta OMDb: $lastOmdbError")
             }
             0.0
         }
