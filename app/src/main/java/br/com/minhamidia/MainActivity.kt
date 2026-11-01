@@ -147,6 +147,7 @@ class MainActivity : ComponentActivity() {
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var showKey by remember { mutableStateOf(false) }
             var imdbApiKey by remember { mutableStateOf(prefs.getString("omdb_key", "") ?: "") }
+            var imdbStatus by remember { mutableStateOf("") }
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
             var showRouletteDialog by remember { mutableStateOf(false) }
@@ -188,15 +189,29 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LaunchedEffect(page, detailItem?.id, detailItem?.type, imdbApiKey) {
+            LaunchedEffect(page, detailItem?.id, detailItem?.type, imdbApiKey, apiKey) {
                 val selected = detailItem
-                if (page == "Detalhes" && selected != null && imdbApiKey.isNotBlank() && selected.imdbRating <= 0.0) {
-                    val rating = runCatching {
-                        TmdbClient.imdbRating(selected.id, selected.title, selected.year, selected.type, apiKey, imdbApiKey)
-                    }.getOrDefault(0.0)
-                    if (rating > 0.0 && detailItem?.id == selected.id && detailItem?.type == selected.type) {
-                        detailItem = selected.copy(imdbRating = rating)
+                if (page == "Detalhes" && selected != null && selected.imdbRating <= 0.0) {
+                    if (imdbApiKey.isBlank()) {
+                        imdbStatus = "Configure e salve sua chave OMDb em Configurações > Avaliações IMDb."
+                    } else {
+                        imdbStatus = "Consultando nota no IMDb..."
+                        try {
+                            val rating = TmdbClient.imdbRating(selected.id, selected.title, selected.year, selected.type, apiKey, imdbApiKey)
+                            if (detailItem?.id == selected.id && detailItem?.type == selected.type) {
+                                if (rating > 0.0) {
+                                    detailItem = selected.copy(imdbRating = rating)
+                                    imdbStatus = ""
+                                } else {
+                                    imdbStatus = "O OMDb não retornou uma nota IMDb para este título."
+                                }
+                            }
+                        } catch (e: Exception) {
+                            imdbStatus = e.message ?: "Falha ao consultar o IMDb. Verifique a conexão e a chave OMDb."
+                        }
                     }
+                } else if (selected?.imdbRating ?: 0.0 > 0.0) {
+                    imdbStatus = ""
                 }
             }
             BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
@@ -528,6 +543,7 @@ class MainActivity : ComponentActivity() {
                                                     Text(selectedTitle.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                                     Text("${if (selectedTitle.type == "tv") "Série" else "Filme"} • ${selectedTitle.year}", color = Muted)
                                                     Text(imdbRatingLabel(selectedTitle.imdbRating), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                    if (imdbStatus.isNotBlank()) Text(imdbStatus, color = Muted, fontSize = 11.sp)
                                                     Spacer(Modifier.height(8.dp))
                                                     Text(selectedTitle.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
                                                 }
