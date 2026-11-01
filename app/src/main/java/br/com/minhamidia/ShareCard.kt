@@ -49,7 +49,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         paint.shader = null
 
-        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverso_logo_horizontal)
+        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
         if (logo != null) {
             val logoRect = RectF(300f, 35f, 780f, 145f)
             val scale = minOf(logoRect.width() / logo.width, logoRect.height() / logo.height)
