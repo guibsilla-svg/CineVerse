@@ -22,5 +22,6 @@ data class MediaItem(
     val totalEpisodes: Int = 0,
     val releaseDate: String = "",
     val seasonProgress: String = "",
-    val sortOrder: Long = 0
+    val sortOrder: Long = 0,
+    val tmdbVoteAverage: Double = 0.0
 )
