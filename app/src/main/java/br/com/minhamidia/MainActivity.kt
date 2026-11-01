@@ -227,6 +227,47 @@ class MainActivity : ComponentActivity() {
             var seasonProgressInput by remember { mutableStateOf("") }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+            val ratingTargets = remember(all, results, exploreResults, recommendedMovies, recommendedShows) {
+                (results + exploreResults + recommendedMovies + recommendedShows).distinctBy { "${it.type}-${it.id}" }
+                    .filter { it.imdbRating <= 0.0 } +
+                    all.filter { it.imdbRating <= 0.0 && it.tmdbId != null }
+                        .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage) }
+            }
+            val ratingTargetKey = ratingTargets.distinctBy { "${it.type}-${it.id}" }
+                .joinToString("|") { "${it.type}-${it.id}" }
+            LaunchedEffect(imdbApiKey, apiKey, ratingTargetKey) {
+                if (imdbApiKey.isNotBlank()) {
+                    ratingTargets.distinctBy { "${it.type}-${it.id}" }.take(40).forEach { target ->
+                        val cacheKey = "omdb_rating_${target.type}_${target.id}"
+                        val checkedKey = "omdb_checked_${target.type}_${target.id}"
+                        val cachedRating = prefs.getFloat(cacheKey, 0f).toDouble()
+                        val checkedAt = prefs.getLong(checkedKey, 0L)
+                        val isFresh = System.currentTimeMillis() - checkedAt < TimeUnit.DAYS.toMillis(14)
+                        val rating = when {
+                            cachedRating > 0.0 -> cachedRating
+                            isFresh -> 0.0
+                            else -> runCatching {
+                                TmdbClient.imdbRating(target.id, target.title, target.year, target.type, apiKey, imdbApiKey)
+                            }.getOrElse { error ->
+                                if (error.message?.contains("Chave OMDb inválida", true) == true) throw error
+                                0.0
+                            }.also {
+                                prefs.edit().putLong(checkedKey, System.currentTimeMillis())
+                                    .putFloat(cacheKey, it.toFloat()).apply()
+                            }
+                        }
+                        if (rating > 0.0) {
+                            results = results.map { if (it.id == target.id && it.type == target.type) it.copy(imdbRating = rating) else it }
+                            exploreResults = exploreResults.map { if (it.id == target.id && it.type == target.type) it.copy(imdbRating = rating) else it }
+                            recommendedMovies = recommendedMovies.map { if (it.id == target.id && it.type == target.type) it.copy(imdbRating = rating) else it }
+                            recommendedShows = recommendedShows.map { if (it.id == target.id && it.type == target.type) it.copy(imdbRating = rating) else it }
+                            all.firstOrNull { it.tmdbId == target.id && it.mediaType == target.type }?.let { saved ->
+                                if (saved.imdbRating <= 0.0) dao.update(saved.copy(imdbRating = rating))
+                            }
+                        }
+                    }
+                }
+            }
             LaunchedEffect(all) {
                 all.filter { it.mediaType == "movie" && it.status == "WATCHING" }.forEach { movie ->
                     dao.update(movie.copy(status = "WATCHLIST"))
@@ -992,7 +1033,7 @@ class MainActivity : ComponentActivity() {
                                         Column(Modifier.weight(1f)) {
                                             Text(featured.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                             Text("${if (featured.mediaType == "tv") "Série" else "Filme"} • ${featured.year}", color = Muted, fontSize = 12.sp)
-                                             Text("★ IMDb: consultar nos detalhes", color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                             Text(imdbRatingLabel(featured.imdbRating), color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text("Título selecionado nas configurações", color = palette.third, fontSize = 11.sp)
                                         }
                                     }
@@ -1441,7 +1482,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
         }
         Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
-        Text("★ IMDb: consultar nos detalhes", color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(imdbRatingLabel(media.imdbRating), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
         TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
     }
 }
@@ -1488,7 +1529,7 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
             Column(Modifier.weight(1f)) {
                 Text(media.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("${if (media.mediaType == "tv") "Série" else "Filme"} • ${media.year}", color = Muted, fontSize = 12.sp)
-                Text("★ IMDb: consultar nos detalhes", color = Color(0xFFFFD166), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(imdbRatingLabel(media.imdbRating), color = Color(0xFFFFD166), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (media.overview.isNotBlank()) Text(media.overview, color = Muted, fontSize = 12.sp, maxLines = 3, modifier = Modifier.padding(top = 4.dp))
                 TextButton(onClick = onFavorite, contentPadding = PaddingValues(0.dp)) { Text(if (favorite) "♥ Favorito" else "♡ Favoritar", color = Purple) }
             }
