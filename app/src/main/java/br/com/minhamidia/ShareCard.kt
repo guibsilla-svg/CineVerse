@@ -11,6 +11,7 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
 import androidx.core.content.FileProvider
+import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,7 +20,20 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-suspend fun createCineVersoShareCard(context: Context, item: TmdbResult): Uri =
+private fun downloadShareImage(url: String): Bitmap? = runCatching {
+    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 12000
+        readTimeout = 12000
+        instanceFollowRedirects = true
+    }
+    try {
+        connection.inputStream.use { BitmapFactory.decodeStream(it) }
+    } finally {
+        connection.disconnect()
+    }
+}.getOrNull()
+
+suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val width = 1080
         val height = 2200
@@ -35,7 +49,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult): Uri =
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         paint.shader = null
 
-        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
+        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverso_logo_horizontal)
         if (logo != null) {
             val logoRect = RectF(300f, 35f, 780f, 145f)
             val scale = minOf(logoRect.width() / logo.width, logoRect.height() / logo.height)
@@ -46,21 +60,8 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult): Uri =
             logo.recycle()
         }
 
-        val poster = item.posterPath?.let { path ->
-            runCatching {
-                val connection = URL("https://image.tmdb.org/t/p/w780$path")
-                    .openConnection() as HttpURLConnection
-                connection.connectTimeout = 12000
-                connection.readTimeout = 12000
-                try {
-                    connection.inputStream.use { BitmapFactory.decodeStream(it) }
-                } finally {
-                    connection.disconnect()
-                }
-            }.getOrNull()
-        }
-
-        val posterRect = RectF(240f, 180f, 840f, 1050f)
+        val poster = item.posterPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w780$it") }
+        val posterRect = RectF(300f, 175f, 780f, 870f)
         paint.color = 0xFF160D22.toInt()
         canvas.drawRoundRect(posterRect, 24f, 24f, paint)
         if (poster != null) {
@@ -74,12 +75,39 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult): Uri =
             paint.color = android.graphics.Color.WHITE
             paint.textSize = 72f
             paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            val fallback = "CineVerso"
-            canvas.drawText(fallback, (width - paint.measureText(fallback)) / 2f, 635f, paint)
+            canvas.drawText("CineVerso", (width - paint.measureText("CineVerso")) / 2f, 535f, paint)
+        }
+
+        // Three cinematic stills are loaded from the TMDB image gallery when available.
+        val backdropPaths = runCatching { TmdbClient.imageBackdrops(item.id, item.type, credential) }.getOrDefault(emptyList())
+        val backdrops = backdropPaths.mapNotNull { path ->
+            downloadShareImage("https://image.tmdb.org/t/p/w780$path")
+        }.take(3)
+        val imageTop = 925f
+        val imageBottom = 1195f
+        val gap = 18f
+        val side = 72f
+        val count = backdrops.size
+        if (count > 0) {
+            val slotWidth = (width - side * 2f - gap * (count - 1)) / count
+            backdrops.forEachIndexed { index, image ->
+                val left = side + index * (slotWidth + gap)
+                val rect = RectF(left, imageTop, left + slotWidth, imageBottom)
+                canvas.save()
+                val clip = android.graphics.Path().apply { addRoundRect(rect, 18f, 18f, android.graphics.Path.Direction.CW) }
+                canvas.clipPath(clip)
+                val scale = maxOf(rect.width() / image.width, rect.height() / image.height)
+                val dstW = image.width * scale
+                val dstH = image.height * scale
+                val dst = RectF(rect.centerX() - dstW / 2f, rect.centerY() - dstH / 2f, rect.centerX() + dstW / 2f, rect.centerY() + dstH / 2f)
+                canvas.drawBitmap(image, null, dst, paint)
+                canvas.restore()
+                image.recycle()
+            }
         }
 
         paint.color = android.graphics.Color.WHITE
-        paint.textSize = 66f
+        paint.textSize = 62f
         paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         val titleLines = mutableListOf<String>()
         var titleLine = ""
@@ -91,27 +119,27 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult): Uri =
             } else titleLine = candidate
         }
         if (titleLine.isNotEmpty()) titleLines.add(titleLine)
-        var titleY = 1145f
+        var titleY = 1290f
         titleLines.take(2).forEach {
             canvas.drawText(it, 80f, titleY, paint)
-            titleY += 76f
+            titleY += 70f
         }
 
         paint.color = 0xFFD5C9E4.toInt()
-        paint.textSize = 36f
+        paint.textSize = 34f
         paint.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         canvas.drawText(
             "${if (item.type == "tv") "Série" else "Filme"}  •  ${item.year.ifBlank { "Ano indisponível" }}",
-            82f, 1300f, paint
+            82f, 1435f, paint
         )
 
         paint.color = 0xFFC29AFF.toInt()
-        paint.textSize = 38f
+        paint.textSize = 36f
         paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-        canvas.drawText("SINOPSE", 80f, 1390f, paint)
+        canvas.drawText("SINOPSE", 80f, 1515f, paint)
 
         paint.color = 0xFFE9E2F2.toInt()
-        paint.textSize = 34f
+        paint.textSize = 32f
         paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         val synopsis = item.overview.ifBlank { "Sinopse indisponível." }
         val synopsisLines = mutableListOf<String>()
@@ -124,17 +152,17 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult): Uri =
             } else synopsisLine = candidate
         }
         if (synopsisLine.isNotEmpty()) synopsisLines.add(synopsisLine)
-        val maxLines = 10
+        val maxLines = 8
         val visibleLines = synopsisLines.take(maxLines).toMutableList()
         if (synopsisLines.size > maxLines && visibleLines.isNotEmpty()) {
             var last = visibleLines.last()
             while (paint.measureText("$last…") > 920f && last.isNotEmpty()) last = last.dropLast(1)
             visibleLines[visibleLines.lastIndex] = "$last…"
         }
-        var synopsisY = 1455f
+        var synopsisY = 1575f
         visibleLines.forEach {
             canvas.drawText(it, 80f, synopsisY, paint)
-            synopsisY += 47f
+            synopsisY += 43f
         }
 
         paint.color = 0xFF9B5CFF.toInt()
