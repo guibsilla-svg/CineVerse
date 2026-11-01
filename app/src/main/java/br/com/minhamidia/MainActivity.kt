@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
                 val selected = detailItem
                 if (page == "Detalhes" && selected != null && imdbApiKey.isNotBlank() && selected.imdbRating <= 0.0) {
                     val rating = runCatching {
-                        TmdbClient.imdbRating(selected.title, selected.year, selected.type, imdbApiKey)
+                        TmdbClient.imdbRating(selected.id, selected.title, selected.year, selected.type, apiKey, imdbApiKey)
                     }.getOrDefault(0.0)
                     if (rating > 0.0 && detailItem?.id == selected.id && detailItem?.type == selected.type) {
                         detailItem = selected.copy(imdbRating = rating)
