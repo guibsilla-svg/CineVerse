@@ -123,15 +123,22 @@ object TmdbClient {
     }
 
 
-    suspend fun imdbRating(title: String, year: String, type: String, apiKey: String): Double =
+    suspend fun imdbRating(id: Int, title: String, year: String, type: String, tmdbCredential: String, apiKey: String): Double =
         withContext(Dispatchers.IO) {
             if (apiKey.isBlank()) return@withContext 0.0
-            val params = buildList {
-                add("t=" + URLEncoder.encode(title, "UTF-8"))
-                if (year.length >= 4) add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
-                add("type=" + if (type == "tv") "series" else "movie")
-                add("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))
-            }.joinToString("&")
+            val mediaType = if (type == "tv") "tv" else "movie"
+            val imdbId = runCatching {
+                requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap()).optString("imdb_id").takeIf { it.startsWith("tt") }
+            }.getOrNull()
+            val queries = buildList {
+                if (!imdbId.isNullOrBlank()) add("i=" + URLEncoder.encode(imdbId, "UTF-8"))
+                else {
+                    add("t=" + URLEncoder.encode(title, "UTF-8"))
+                    if (year.length >= 4) add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
+                    add("type=" + if (type == "tv") "series" else "movie")
+                }
+            }
+            val params = (queries + ("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))).joinToString("&")
             val connection = (URL("https://www.omdbapi.com/?$params").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 12000
@@ -141,7 +148,7 @@ object TmdbClient {
             try {
                 val code = connection.responseCode
                 if (code !in 200..299) return@withContext 0.0
-                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val body = (connection.inputStream ?: connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
                 val json = JSONObject(body)
                 if (!json.optBoolean("Response", false)) return@withContext 0.0
                 json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
