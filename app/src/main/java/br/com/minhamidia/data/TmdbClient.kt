@@ -121,6 +121,12 @@ object TmdbClient {
     }
 
 
+    suspend fun rating(id: Int, type: String, credential: String): Double {
+        val endpoint = if (type == "tv") "tv" else "movie"
+        return requestObject("/$endpoint/$id", credential, mapOf("language" to "pt-BR"))
+            .optDouble("vote_average", 0.0)
+    }
+
     suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
 
