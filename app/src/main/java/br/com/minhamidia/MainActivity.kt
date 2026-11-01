@@ -518,6 +518,30 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
+                                            OutlinedButton(
+                                                onClick = {
+                                                    lifecycleScope.launch {
+                                                        runCatching {
+                                                            val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle)
+                                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                                type = "image/png"
+                                                                putExtra(Intent.EXTRA_STREAM, imageUri)
+                                                                putExtra(Intent.EXTRA_TEXT, "Minha recomendação do CineVerso: ${selectedTitle.title} (${selectedTitle.year}).")
+                                                                clipData = android.content.ClipData.newUri(contentResolver, "Card CineVerso", imageUri)
+                                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                            }
+                                                            startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
+                                                        }.onFailure {
+                                                            message = "Não foi possível gerar o card. Verifique sua conexão e tente novamente."
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC29AFF))
+                                            ) {
+                                                Text("COMPARTILHAR RECOMENDAÇÃO", fontWeight = FontWeight.Bold)
+                                            }
+                                            Spacer(Modifier.height(4.dp))
                                             Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                             when {
                                                 detailTrailerLoading -> Box(
