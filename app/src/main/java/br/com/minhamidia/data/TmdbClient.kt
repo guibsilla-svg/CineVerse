@@ -15,7 +15,8 @@ data class TmdbResult(
     val posterPath: String?,
     val overview: String,
     val releaseDate: String,
-    val tmdbVoteAverage: Double = 0.0
+    val tmdbVoteAverage: Double = 0.0,
+    val imdbRating: Double = 0.0
 ) {
     fun toMediaItem() = MediaItem(
         tmdbId = id,
@@ -25,7 +26,8 @@ data class TmdbResult(
         posterPath = posterPath,
         overview = overview,
         releaseDate = releaseDate,
-        tmdbVoteAverage = tmdbVoteAverage
+        tmdbVoteAverage = tmdbVoteAverage,
+        imdbRating = imdbRating
     )
 }
 
@@ -119,6 +121,34 @@ object TmdbClient {
             }
         }
     }
+
+
+    suspend fun imdbRating(title: String, year: String, type: String, apiKey: String): Double =
+        withContext(Dispatchers.IO) {
+            if (apiKey.isBlank()) return@withContext 0.0
+            val params = buildList {
+                add("t=" + URLEncoder.encode(title, "UTF-8"))
+                if (year.length >= 4) add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
+                add("type=" + if (type == "tv") "series" else "movie")
+                add("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))
+            }.joinToString("&")
+            val connection = (URL("https://www.omdbapi.com/?$params").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 12000
+                readTimeout = 12000
+                setRequestProperty("Accept", "application/json")
+            }
+            try {
+                val code = connection.responseCode
+                if (code !in 200..299) return@withContext 0.0
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                if (!json.optBoolean("Response", false)) return@withContext 0.0
+                json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
+            } finally {
+                connection.disconnect()
+            }
+        }
 
     suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
         requestObject("/tv/$id", credential, mapOf("language" to "pt-BR"))
