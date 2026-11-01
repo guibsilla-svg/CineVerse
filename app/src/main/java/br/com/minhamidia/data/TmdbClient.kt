@@ -14,7 +14,8 @@ data class TmdbResult(
     val year: String,
     val posterPath: String?,
     val overview: String,
-    val releaseDate: String
+    val releaseDate: String,
+    val tmdbVoteAverage: Double = 0.0
 ) {
     fun toMediaItem() = MediaItem(
         tmdbId = id,
@@ -23,7 +24,8 @@ data class TmdbResult(
         year = year,
         posterPath = posterPath,
         overview = overview,
-        releaseDate = releaseDate
+        releaseDate = releaseDate,
+        tmdbVoteAverage = tmdbVoteAverage
     )
 }
 
@@ -232,7 +234,8 @@ object TmdbClient {
                         year = date.take(4),
                         posterPath = item.optString("poster_path").takeIf { it.isNotBlank() && it != "null" },
                         overview = item.optString("overview"),
-                        releaseDate = date
+                        releaseDate = date,
+                        tmdbVoteAverage = item.optDouble("vote_average", 0.0)
                     ))
                 }
             }
