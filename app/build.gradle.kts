@@ -15,6 +15,9 @@ android {
         versionCode = providers.gradleProperty("appVersionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("appVersionName").orNull ?: "1.0.0"
         buildConfigField("String", "TMDB_API_KEY", "\"ed317a1df951109bde5285a44be90bd9\"")
+        val omdbKey = (providers.environmentVariable("OMDB_API_KEY").orNull ?: "")
+            .replace("\\", "\\\\").replace("\"", "\\\"")
+        buildConfigField("String", "OMDB_API_KEY", "\"$omdbKey\"")
     }
     signingConfigs {
         create("release") {
