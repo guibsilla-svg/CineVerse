@@ -127,12 +127,8 @@ object TmdbClient {
         withContext(Dispatchers.IO) {
             require(apiKey.isNotBlank()) { "Configure sua chave OMDb em Configurações > Avaliações IMDb." }
             val mediaType = if (type == "tv") "tv" else "movie"
-            val imdbId = runCatching {
-                requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap())
-                    .optString("imdb_id").takeIf { it.startsWith("tt") }
-            }.getOrNull()
 
-            suspend fun omdb(params: List<String>): Double {
+            suspend fun omdb(params: List<String>): JSONObject {
                 val query = (params + ("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))).joinToString("&")
                 val connection = (URL("https://www.omdbapi.com/?$query").openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
@@ -153,41 +149,71 @@ object TmdbClient {
                         }
                         throw IllegalStateException(error)
                     }
-                    return json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.1..10.0 } ?: 0.0
+                    return json
                 } finally {
                     connection.disconnect()
                 }
             }
 
+            fun rating(json: JSONObject): Double =
+                json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.1..10.0 } ?: 0.0
+
+            val imdbId = runCatching {
+                requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap())
+                    .optString("imdb_id").takeIf { it.startsWith("tt") }
+            }.getOrNull()
+
             if (!imdbId.isNullOrBlank()) {
-                val byId = try {
-                    omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8")))
-                } catch (e: Exception) {
-                    if (e.message?.contains("Chave OMDb inválida", true) == true) throw e
-                    0.0
-                }
+                val byId = runCatching { rating(omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8")))) }
+                    .getOrDefault(0.0)
                 if (byId > 0.0) return@withContext byId
             }
 
             val encodedTitle = URLEncoder.encode(title.trim(), "UTF-8")
             val typeParam = if (type == "tv") "series" else "movie"
-            val attempts = buildList {
-                if (year.length >= 4) add(listOf("t=$encodedTitle", "y=${URLEncoder.encode(year.take(4), "UTF-8")}", "type=$typeParam"))
-                add(listOf("t=$encodedTitle", "type=$typeParam"))
-                if (year.length >= 4) add(listOf("t=$encodedTitle", "y=${URLEncoder.encode(year.take(4), "UTF-8")}"))
-                add(listOf("t=$encodedTitle"))
-            }
-            var lastError: Exception? = null
-            for (params in attempts) {
-                try {
-                    val rating = omdb(params)
-                    if (rating > 0.0) return@withContext rating
-                } catch (e: Exception) {
-                    if (e.message?.contains("Chave OMDb inválida", true) == true) throw e
-                    lastError = e
+
+            // Search tolera títulos alternativos/localizados, ao contrário da consulta estrita t=.
+            val searchParams = mutableListOf("s=$encodedTitle", "type=$typeParam")
+            if (year.length >= 4) searchParams.add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
+            val search = runCatching { omdb(searchParams) }.getOrNull()
+                ?: runCatching { omdb(listOf("s=$encodedTitle", "type=$typeParam")) }.getOrNull()
+
+            if (search != null) {
+                val entries = search.optJSONArray("Search")
+                if (entries != null) {
+                    fun normalize(value: String): String =
+                        java.text.Normalizer.normalize(value.lowercase(java.util.Locale.ROOT), java.text.Normalizer.Form.NFD)
+                            .replace(Regex("\\p{Mn}+"), "")
+                            .replace(Regex("[^a-z0-9]+"), " ")
+                            .trim()
+                    val wanted = normalize(title)
+                    val candidates = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+                        .filter { it.optString("imdbID").startsWith("tt") }
+                        .sortedWith(compareByDescending<JSONObject> {
+                            normalize(it.optString("Title")) == wanted
+                        }.thenByDescending {
+                            year.length >= 4 && it.optString("Year").take(4) == year.take(4)
+                        })
+                    for (candidate in candidates) {
+                        val candidateId = candidate.optString("imdbID")
+                        val value = runCatching {
+                            rating(omdb(listOf("i=" + URLEncoder.encode(candidateId, "UTF-8"))))
+                        }.getOrDefault(0.0)
+                        if (value > 0.0) return@withContext value
+                    }
                 }
             }
-            if (lastError != null && attempts.isNotEmpty()) throw lastError
+
+            val directAttempts = buildList {
+                if (year.length >= 4) add(listOf("t=$encodedTitle", "y=" + URLEncoder.encode(year.take(4), "UTF-8"), "type=$typeParam"))
+                add(listOf("t=$encodedTitle", "type=$typeParam"))
+                if (year.length >= 4) add(listOf("t=$encodedTitle", "y=" + URLEncoder.encode(year.take(4), "UTF-8")))
+                add(listOf("t=$encodedTitle"))
+            }
+            for (params in directAttempts) {
+                val value = runCatching { rating(omdb(params)) }.getOrDefault(0.0)
+                if (value > 0.0) return@withContext value
+            }
             0.0
         }
 
