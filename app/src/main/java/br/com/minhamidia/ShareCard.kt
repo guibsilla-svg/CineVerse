@@ -120,10 +120,10 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val year = item.year.ifBlank { "Ano indisponível" }
         canvas.drawText(year, (width - paint.measureText(year)) / 2f, 635f, paint)
 
-        val ratingText = if (item.tmdbVoteAverage > 0.0) {
-            "★ %.1f/10 • NOTA TMDB".format(java.util.Locale.US, item.tmdbVoteAverage)
+        val ratingText = if (item.imdbRating > 0.0) {
+            "★ %.1f/10 • NOTA IMDb".format(java.util.Locale.US, item.imdbRating)
         } else {
-            "★ Sem avaliação TMDB"
+            "★ Consulte a nota IMDb no CineVerso"
         }
         paint.color = 0xFFFFD166.toInt()
         paint.textSize = 28f
