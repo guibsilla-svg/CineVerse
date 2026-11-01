@@ -522,7 +522,7 @@ class MainActivity : ComponentActivity() {
                                                 onClick = {
                                                     lifecycleScope.launch {
                                                         runCatching {
-                                                            val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle)
+                                                            val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
                                                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                                                 type = "image/png"
                                                                 putExtra(Intent.EXTRA_STREAM, imageUri)
