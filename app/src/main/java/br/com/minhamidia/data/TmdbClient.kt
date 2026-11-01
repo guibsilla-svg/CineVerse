@@ -130,31 +130,35 @@ object TmdbClient {
             val imdbId = runCatching {
                 requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap()).optString("imdb_id").takeIf { it.startsWith("tt") }
             }.getOrNull()
-            val queries = buildList {
-                if (!imdbId.isNullOrBlank()) add("i=" + URLEncoder.encode(imdbId, "UTF-8"))
-                else {
-                    add("t=" + URLEncoder.encode(title, "UTF-8"))
-                    if (year.length >= 4) add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
-                    add("type=" + if (type == "tv") "series" else "movie")
+            suspend fun omdb(params: List<String>): Double {
+                val query = (params + ("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))).joinToString("&")
+                val connection = (URL("https://www.omdbapi.com/?$query").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                    setRequestProperty("Accept", "application/json")
                 }
+                try {
+                    val code = connection.responseCode
+                    val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    if (code !in 200..299) throw IllegalStateException("OMDb respondeu HTTP $code.")
+                    val json = JSONObject(body)
+                    if (!json.optBoolean("Response", false)) {
+                        val error = json.optString("Error", "Título não encontrado no OMDb.")
+                        if (error.contains("Invalid API key", true)) throw IllegalStateException("Chave OMDb inválida. Confira e salve novamente em Configurações.")
+                        throw IllegalStateException(error)
+                    }
+                    json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
+                } finally { connection.disconnect() }
             }
-            val params = (queries + ("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))).joinToString("&")
-            val connection = (URL("https://www.omdbapi.com/?$params").openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 12000
-                readTimeout = 12000
-                setRequestProperty("Accept", "application/json")
+            if (!imdbId.isNullOrBlank()) {
+                val byId = runCatching { omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8"))) }.getOrNull() ?: 0.0
+                if (byId > 0.0) return@withContext byId
             }
-            try {
-                val code = connection.responseCode
-                if (code !in 200..299) return@withContext 0.0
-                val body = (connection.inputStream ?: connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                val json = JSONObject(body)
-                if (!json.optBoolean("Response", false)) return@withContext 0.0
-                json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
-            } finally {
-                connection.disconnect()
-            }
+            val fallback = mutableListOf("t=" + URLEncoder.encode(title, "UTF-8"))
+            if (year.length >= 4) fallback.add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
+            fallback.add("type=" + if (type == "tv") "series" else "movie")
+            omdb(fallback)
         }
 
     suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
