@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
             var recommendationsError by remember { mutableStateOf("") }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var showKey by remember { mutableStateOf(false) }
-            var imdbApiKey by remember { mutableStateOf(BuildConfig.OMDB_API_KEY.takeIf { it.isNotBlank() } ?: (prefs.getString("omdb_key", "") ?: "")) }
+            var imdbApiKey by remember { mutableStateOf((prefs.getString("omdb_key", "") ?: "").takeIf { it.isNotBlank() } ?: BuildConfig.OMDB_API_KEY) }
             var imdbStatus by remember { mutableStateOf("") }
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
