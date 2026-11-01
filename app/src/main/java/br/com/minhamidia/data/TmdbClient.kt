@@ -125,11 +125,13 @@ object TmdbClient {
 
     suspend fun imdbRating(id: Int, title: String, year: String, type: String, tmdbCredential: String, apiKey: String): Double =
         withContext(Dispatchers.IO) {
-            if (apiKey.isBlank()) return@withContext 0.0
+            require(apiKey.isNotBlank()) { "Configure sua chave OMDb em Configurações > Avaliações IMDb." }
             val mediaType = if (type == "tv") "tv" else "movie"
             val imdbId = runCatching {
-                requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap()).optString("imdb_id").takeIf { it.startsWith("tt") }
+                requestObject("/$mediaType/$id/external_ids", tmdbCredential, emptyMap())
+                    .optString("imdb_id").takeIf { it.startsWith("tt") }
             }.getOrNull()
+
             suspend fun omdb(params: List<String>): Double {
                 val query = (params + ("apikey=" + URLEncoder.encode(apiKey.trim(), "UTF-8"))).joinToString("&")
                 val connection = (URL("https://www.omdbapi.com/?$query").openConnection() as HttpURLConnection).apply {
@@ -140,25 +142,53 @@ object TmdbClient {
                 }
                 try {
                     val code = connection.responseCode
-                    val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    val body = (if (code in 200..299) connection.inputStream else connection.errorStream)
+                        ?.bufferedReader()?.use { it.readText() }.orEmpty()
                     if (code !in 200..299) throw IllegalStateException("OMDb respondeu HTTP $code.")
                     val json = JSONObject(body)
                     if (!json.optBoolean("Response", false)) {
                         val error = json.optString("Error", "Título não encontrado no OMDb.")
-                        if (error.contains("Invalid API key", true)) throw IllegalStateException("Chave OMDb inválida. Confira e salve novamente em Configurações.")
+                        if (error.contains("Invalid API key", true)) {
+                            throw IllegalStateException("Chave OMDb inválida. Confira e salve novamente em Configurações.")
+                        }
                         throw IllegalStateException(error)
                     }
-                    return json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
-                } finally { connection.disconnect() }
+                    return json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.1..10.0 } ?: 0.0
+                } finally {
+                    connection.disconnect()
+                }
             }
+
             if (!imdbId.isNullOrBlank()) {
-                val byId = runCatching { omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8"))) }.getOrNull() ?: 0.0
+                val byId = try {
+                    omdb(listOf("i=" + URLEncoder.encode(imdbId, "UTF-8")))
+                } catch (e: Exception) {
+                    if (e.message?.contains("Chave OMDb inválida", true) == true) throw e
+                    0.0
+                }
                 if (byId > 0.0) return@withContext byId
             }
-            val fallback = mutableListOf("t=" + URLEncoder.encode(title, "UTF-8"))
-            if (year.length >= 4) fallback.add("y=" + URLEncoder.encode(year.take(4), "UTF-8"))
-            fallback.add("type=" + if (type == "tv") "series" else "movie")
-            omdb(fallback)
+
+            val encodedTitle = URLEncoder.encode(title.trim(), "UTF-8")
+            val typeParam = if (type == "tv") "series" else "movie"
+            val attempts = buildList {
+                if (year.length >= 4) add(listOf("t=$encodedTitle", "y=${URLEncoder.encode(year.take(4), "UTF-8")}", "type=$typeParam"))
+                add(listOf("t=$encodedTitle", "type=$typeParam"))
+                if (year.length >= 4) add(listOf("t=$encodedTitle", "y=${URLEncoder.encode(year.take(4), "UTF-8")}"))
+                add(listOf("t=$encodedTitle"))
+            }
+            var lastError: Exception? = null
+            for (params in attempts) {
+                try {
+                    val rating = omdb(params)
+                    if (rating > 0.0) return@withContext rating
+                } catch (e: Exception) {
+                    if (e.message?.contains("Chave OMDb inválida", true) == true) throw e
+                    lastError = e
+                }
+            }
+            if (lastError != null && attempts.isNotEmpty()) throw lastError
+            0.0
         }
 
     suspend fun nextEpisodeInfo(id: Int, credential: String): JSONObject =
