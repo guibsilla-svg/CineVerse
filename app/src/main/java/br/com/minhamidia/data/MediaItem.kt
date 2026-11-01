@@ -23,5 +23,6 @@ data class MediaItem(
     val releaseDate: String = "",
     val seasonProgress: String = "",
     val sortOrder: Long = 0,
-    val tmdbVoteAverage: Double = 0.0
+    val tmdbVoteAverage: Double = 0.0,
+    val imdbRating: Double = 0.0
 )
