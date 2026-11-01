@@ -35,9 +35,6 @@ private fun downloadShareImage(url: String): Bitmap? = runCatching {
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val width = 1080
-        val height = 1080
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         // Clean, square recommendation card: poster, title, year, synopsis, logo and action.
@@ -110,22 +107,33 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             } else synopsisLine = candidate
         }
         if (synopsisLine.isNotEmpty()) synopsisLines.add(synopsisLine)
-        val maxLines = 4
-        val visibleLines = synopsisLines.take(maxLines).toMutableList()
-        if (synopsisLines.size > maxLines && visibleLines.isNotEmpty()) {
-            var last = visibleLines.last()
-            while (paint.measureText("$last…") > 920f && last.isNotEmpty()) last = last.dropLast(1)
-            visibleLines[visibleLines.lastIndex] = "$last…"
+        val ratingText = if (item.tmdbVoteAverage > 0.0) "★ %.1f/10 • TMDB".format(java.util.Locale.US, item.tmdbVoteAverage) else "★ Sem avaliação TMDB"
+        val ratingY = 680f
+        val synopsisStartY = 730f
+        var synopsisDrawY = synopsisStartY
+        synopsisLines.forEach {
+            canvas.drawText(it, (width - paint.measureText(it)) / 2f, synopsisDrawY, paint)
+            synopsisDrawY += 36f
         }
-        var synopsisY = 690f
-        visibleLines.forEach {
-            canvas.drawText(it, (width - paint.measureText(it)) / 2f, synopsisY, paint)
-            synopsisY += 36f
-        }
+
+        val contentBottom = synopsisDrawY + 30f
+        val baseHeight = maxOf(1080f, contentBottom + 300f)
+        val scaleFactor = baseHeight / 1080f
+        val height = baseHeight.toInt()
+        val bitmap = Bitmap.createBitmap(height, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.scale(scaleFactor, scaleFactor)
+        paint.shader = LinearGradient(0f, 0f, width.toFloat(), 1080f, intArrayOf(0xFF08070D.toInt(), 0xFF241238.toInt(), 0xFF08070D.toInt()), null, Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, width.toFloat(), 1080f, paint)
+        paint.shader = null
+        paint.color = 0xFFFFD166.toInt()
+        paint.textSize = 30f
+        paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        canvas.drawText(ratingText, (width - paint.measureText(ratingText)) / 2f, ratingY, paint)
 
         val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
         if (logo != null) {
-            val logoRect = RectF(365f, 845f, 715f, 920f)
+            val logoRect = RectF(365f, contentBottom + 30f, 715f, contentBottom + 105f)
             val scale = minOf(logoRect.width() / logo.width, logoRect.height() / logo.height)
             val dstW = logo.width * scale
             val dstH = logo.height * scale
@@ -138,12 +146,12 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         }
 
         paint.color = 0xFF9B5CFF.toInt()
-        canvas.drawRoundRect(RectF(72f, 955f, 1008f, 1040f), 22f, 22f, paint)
+        canvas.drawRoundRect(RectF(72f, contentBottom + 125f, 1008f, contentBottom + 210f), 22f, 22f, paint)
         paint.color = android.graphics.Color.WHITE
         paint.textSize = 36f
         paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         val footer = "MINHA INDICAÇÃO"
-        canvas.drawText(footer, (width - paint.measureText(footer)) / 2f, 1010f, paint)
+        canvas.drawText(footer, (width - paint.measureText(footer)) / 2f, contentBottom + 180f, paint)
 
         val directory = File(context.cacheDir, "shared_recommendations").apply { mkdirs() }
         val output = File(directory, "cineverso_${item.type}_${item.id}.png")
