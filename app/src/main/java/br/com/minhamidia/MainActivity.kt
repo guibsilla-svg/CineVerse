@@ -206,6 +206,17 @@ class MainActivity : ComponentActivity() {
                     dao.update(movie.copy(status = "WATCHLIST"))
                 }
             }
+            LaunchedEffect(apiKey, all) {
+                if (apiKey.isNotBlank()) {
+                    all.filter { it.tmdbId != null && it.tmdbVoteAverage <= 0.0 }.forEach { media ->
+                        runCatching {
+                            val score = TmdbClient.rating(media.tmdbId!!, media.mediaType, apiKey)
+                            if (score > 0.0) dao.update(media.copy(tmdbVoteAverage = score))
+                        }
+                    }
+                }
+            }
+
             LaunchedEffect(apiKey, all, favorites, homeOrder) {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
@@ -1097,7 +1108,7 @@ class MainActivity : ComponentActivity() {
                 }
                 if (showRouletteDialog) {
                     val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null && (rouletteYear == "Todos" || it.year == rouletteYear) }
-                        .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate) }
+                        .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage) }
                     val options = if (rouletteMode == "LIST") collectionOptions else emptyList()
                     val genreOptions = if (rouletteType == "movie") listOf(
                         "Todos" to null, "Ação" to 28, "Aventura" to 12, "Animação" to 16, "Comédia" to 35,
@@ -1360,7 +1371,7 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
 )
 
 
-private fun tmdbRatingLabel(value: Double): String = if (value > 0.0) "★ %.1f/10 • TMDB".format(java.util.Locale.US, value) else "★ Sem avaliação TMDB"
+private fun tmdbRatingLabel(value: Double): String = if (value > 0.0) "★ %.0f%% • TMDB".format(java.util.Locale.US, (value * 10.0).coerceIn(0.0, 100.0)) else "★ Sem avaliação TMDB"
 
 @Composable
 private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
