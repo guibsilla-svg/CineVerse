@@ -140,12 +140,19 @@ object TmdbClient {
                     val code = connection.responseCode
                     val body = (if (code in 200..299) connection.inputStream else connection.errorStream)
                         ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    if (code !in 200..299) throw IllegalStateException("OMDb respondeu HTTP $code.")
-                    val json = JSONObject(body)
+                    val json = runCatching { JSONObject(body) }.getOrNull()
+                    val apiError = json?.optString("Error").orEmpty()
+                    if (code !in 200..299) {
+                        if (code == 401 || apiError.contains("Invalid API key", true)) {
+                            throw IllegalStateException("Chave OMDb inválida ou não autorizada (HTTP 401). Confira a chave em Configurações > Avaliações IMDb.")
+                        }
+                        throw IllegalStateException(apiError.ifBlank { "OMDb respondeu HTTP $code." })
+                    }
+                    if (json == null) throw IllegalStateException("Resposta inválida do OMDb.")
                     if (!json.optBoolean("Response", false)) {
                         val error = json.optString("Error", "Título não encontrado no OMDb.")
                         if (error.contains("Invalid API key", true)) {
-                            throw IllegalStateException("Chave OMDb inválida. Confira e salve novamente em Configurações.")
+                            throw IllegalStateException("Chave OMDb inválida ou não autorizada. Confira e salve novamente em Configurações.")
                         }
                         throw IllegalStateException(error)
                     }
