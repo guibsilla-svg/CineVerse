@@ -237,12 +237,13 @@ class MainActivity : ComponentActivity() {
                 .joinToString("|") { "${it.type}-${it.id}" }
             LaunchedEffect(imdbApiKey, apiKey, ratingTargetKey) {
                 if (imdbApiKey.isNotBlank()) {
-                    ratingTargets.distinctBy { "${it.type}-${it.id}" }.take(40).forEach { target ->
+                    ratingTargets.distinctBy { "${it.type}-${it.id}" }.forEach { target ->
                         val cacheKey = "omdb_rating_${target.type}_${target.id}"
                         val checkedKey = "omdb_checked_${target.type}_${target.id}"
                         val cachedRating = prefs.getFloat(cacheKey, 0f).toDouble()
                         val checkedAt = prefs.getLong(checkedKey, 0L)
-                        val isFresh = System.currentTimeMillis() - checkedAt < TimeUnit.DAYS.toMillis(14)
+                        val cacheTtl = if (cachedRating > 0.0) TimeUnit.DAYS.toMillis(14) else TimeUnit.HOURS.toMillis(12)
+                        val isFresh = System.currentTimeMillis() - checkedAt < cacheTtl
                         val rating = when {
                             cachedRating > 0.0 -> cachedRating
                             isFresh -> 0.0
