@@ -958,6 +958,7 @@ class MainActivity : ComponentActivity() {
                                         Column(Modifier.weight(1f)) {
                                             Text(featured.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                             Text("${if (featured.mediaType == "tv") "Série" else "Filme"} • ${featured.year}", color = Muted, fontSize = 12.sp)
+                                             Text(tmdbRatingLabel(featured.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text("Título selecionado nas configurações", color = palette.third, fontSize = 11.sp)
                                         }
                                     }
