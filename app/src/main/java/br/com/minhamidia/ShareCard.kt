@@ -36,14 +36,41 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
     withContext(Dispatchers.IO) {
         val width = 1080
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val synopsis = item.overview.ifBlank { "Sinopse indisponível." }
 
-        // Clean, square recommendation card: poster, title, year, synopsis, logo and action.
+        paint.textSize = 27f
+        paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        val synopsisLines = mutableListOf<String>()
+        var currentLine = ""
+        for (word in synopsis.split(Regex("\\s+"))) {
+            val candidate = if (currentLine.isEmpty()) word else "$currentLine $word"
+            if (paint.measureText(candidate) > 920f && currentLine.isNotEmpty()) {
+                synopsisLines.add(currentLine)
+                currentLine = word
+            } else {
+                currentLine = candidate
+            }
+        }
+        if (currentLine.isNotEmpty()) synopsisLines.add(currentLine)
+
+        val synopsisStartY = 730f
+        val synopsisLineHeight = 36f
+        val synopsisEndY = synopsisStartY + synopsisLines.size * synopsisLineHeight
+        val contentBottom = synopsisEndY + 30f
+        // The image remains square; its side grows when a long synopsis needs more room.
+        val logicalHeight = maxOf(1080f, contentBottom + 300f)
+        val outputSize = logicalHeight.toInt()
+        val bitmap = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val scaleFactor = outputSize / 1080f
+        canvas.scale(scaleFactor, scaleFactor)
+
         paint.shader = LinearGradient(
-            0f, 0f, width.toFloat(), height.toFloat(),
+            0f, 0f, width.toFloat(), 1080f,
             intArrayOf(0xFF08070D.toInt(), 0xFF241238.toInt(), 0xFF08070D.toInt()),
             null, Shader.TileMode.CLAMP
         )
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        canvas.drawRect(0f, 0f, 1080f, 1080f, paint)
         paint.shader = null
 
         val poster = item.posterPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w780$it") }
@@ -56,9 +83,9 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
                 addRoundRect(posterRect, 22f, 22f, android.graphics.Path.Direction.CW)
             }
             canvas.clipPath(clip)
-            val scale = maxOf(posterRect.width() / poster.width, posterRect.height() / poster.height)
-            val dstW = poster.width * scale
-            val dstH = poster.height * scale
+            val posterScale = maxOf(posterRect.width() / poster.width, posterRect.height() / poster.height)
+            val dstW = poster.width * posterScale
+            val dstH = poster.height * posterScale
             val dst = RectF(
                 posterRect.centerX() - dstW / 2f, posterRect.centerY() - dstH / 2f,
                 posterRect.centerX() + dstW / 2f, posterRect.centerY() + dstH / 2f
@@ -93,50 +120,31 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val year = item.year.ifBlank { "Ano indisponível" }
         canvas.drawText(year, (width - paint.measureText(year)) / 2f, 635f, paint)
 
+        val ratingText = if (item.tmdbVoteAverage > 0.0) {
+            "★ %.1f/10 • NOTA TMDB".format(java.util.Locale.US, item.tmdbVoteAverage)
+        } else {
+            "★ Sem avaliação TMDB"
+        }
+        paint.color = 0xFFFFD166.toInt()
+        paint.textSize = 28f
+        paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        canvas.drawText(ratingText, (width - paint.measureText(ratingText)) / 2f, 680f, paint)
+
         paint.color = 0xFFE9E2F2.toInt()
         paint.textSize = 27f
         paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-        val synopsis = item.overview.ifBlank { "Sinopse indisponível." }
-        val synopsisLines = mutableListOf<String>()
-        var synopsisLine = ""
-        for (word in synopsis.split(Regex("\\s+"))) {
-            val candidate = if (synopsisLine.isEmpty()) word else "$synopsisLine $word"
-            if (paint.measureText(candidate) > 920f && synopsisLine.isNotEmpty()) {
-                synopsisLines.add(synopsisLine)
-                synopsisLine = word
-            } else synopsisLine = candidate
+        var synopsisY = synopsisStartY
+        synopsisLines.forEach { line ->
+            canvas.drawText(line, (width - paint.measureText(line)) / 2f, synopsisY, paint)
+            synopsisY += synopsisLineHeight
         }
-        if (synopsisLine.isNotEmpty()) synopsisLines.add(synopsisLine)
-        val ratingText = if (item.tmdbVoteAverage > 0.0) "★ %.1f/10 • TMDB".format(java.util.Locale.US, item.tmdbVoteAverage) else "★ Sem avaliação TMDB"
-        val ratingY = 680f
-        val synopsisStartY = 730f
-        var synopsisDrawY = synopsisStartY
-        synopsisLines.forEach {
-            canvas.drawText(it, (width - paint.measureText(it)) / 2f, synopsisDrawY, paint)
-            synopsisDrawY += 36f
-        }
-
-        val contentBottom = synopsisDrawY + 30f
-        val baseHeight = maxOf(1080f, contentBottom + 300f)
-        val scaleFactor = baseHeight / 1080f
-        val height = baseHeight.toInt()
-        val bitmap = Bitmap.createBitmap(height, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.scale(scaleFactor, scaleFactor)
-        paint.shader = LinearGradient(0f, 0f, width.toFloat(), 1080f, intArrayOf(0xFF08070D.toInt(), 0xFF241238.toInt(), 0xFF08070D.toInt()), null, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, width.toFloat(), 1080f, paint)
-        paint.shader = null
-        paint.color = 0xFFFFD166.toInt()
-        paint.textSize = 30f
-        paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        canvas.drawText(ratingText, (width - paint.measureText(ratingText)) / 2f, ratingY, paint)
 
         val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
         if (logo != null) {
             val logoRect = RectF(365f, contentBottom + 30f, 715f, contentBottom + 105f)
-            val scale = minOf(logoRect.width() / logo.width, logoRect.height() / logo.height)
-            val dstW = logo.width * scale
-            val dstH = logo.height * scale
+            val logoScale = minOf(logoRect.width() / logo.width, logoRect.height() / logo.height)
+            val dstW = logo.width * logoScale
+            val dstH = logo.height * logoScale
             val dst = RectF(
                 (width - dstW) / 2f, logoRect.centerY() - dstH / 2f,
                 (width + dstW) / 2f, logoRect.centerY() + dstH / 2f
