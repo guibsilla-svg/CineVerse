@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [MediaItem::class], version = 4, exportSchema = false)
+@Database(entities = [MediaItem::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
     companion object {
@@ -24,10 +24,15 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE media ADD COLUMN tmdbVoteAverage REAL NOT NULL DEFAULT 0.0")
             }
         }
+        private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN imdbRating REAL NOT NULL DEFAULT 0.0")
+            }
+        }
         @Volatile private var INSTANCE: AppDatabase? = null
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "minha-midia.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { INSTANCE = it }
+                INSTANCE ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "minha-midia.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
             }
     }
 }
