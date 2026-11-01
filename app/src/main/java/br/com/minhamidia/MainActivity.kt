@@ -225,7 +225,11 @@ class MainActivity : ComponentActivity() {
                     val lastUpdate = prefs.getLong("trending_last_update", 0L)
                     val cachedMovies = prefs.getString("trending_movies_cache", null)
                     val cachedShows = prefs.getString("trending_shows_cache", null)
-                    val cacheValid = now - lastUpdate < TimeUnit.HOURS.toMillis(24) &&
+                    // Older recommendation caches may contain zero ratings from before
+                    // TMDB scores were displayed. Force one fresh fetch after this update.
+                    val ratingCacheVersion = prefs.getInt("trending_rating_cache_version", 0)
+                    val cacheValid = ratingCacheVersion >= 1 &&
+                        now - lastUpdate < TimeUnit.HOURS.toMillis(24) &&
                         !cachedMovies.isNullOrBlank() && !cachedShows.isNullOrBlank()
 
                     fun decodeCache(json: String?): List<TmdbResult> = runCatching {
@@ -288,6 +292,7 @@ class MainActivity : ComponentActivity() {
                                 .putString("trending_movies_cache", encodeCache(recommendedMovies))
                                 .putString("trending_shows_cache", encodeCache(recommendedShows))
                                 .putLong("trending_last_update", now)
+                                .putInt("trending_rating_cache_version", 1)
                                 .apply()
                         }
                         val errors = listOfNotNull(
