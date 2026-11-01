@@ -44,7 +44,9 @@ jobs:
       - name: Build signed APK
         env:
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-        run: gradle --no-daemon assembleRelease -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME"
+        run: |
+          test -n "$OMDB_API_KEY" || (echo "Missing GitHub secret OMDB_API_KEY" && exit 1)
+          gradle --no-daemon assembleRelease -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME"
       - name: Prepare release APK
         run: cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/cineverse.apk
       - name: Publish GitHub Release
