@@ -587,16 +587,28 @@ class MainActivity : ComponentActivity() {
                                             Spacer(Modifier.height(4.dp))
                                             val savedTitle = all.firstOrNull { it.tmdbId == selectedTitle.id && it.mediaType == selectedTitle.type }
                                             if (savedTitle != null) {
-                                                Button(
-                                                    onClick = {
-                                                        lifecycleScope.launch {
-                                                            val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
-                                                            if (existing != null) dao.delete(existing)
-                                                        }
-                                                    },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
-                                                ) { Text("NA MINHA LISTA • REMOVER", color = Color.White, fontWeight = FontWeight.Bold) }
+                                                if (savedTitle.status == "WATCHED") {
+                                                    Button(
+                                                        onClick = {},
+                                                        enabled = false,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            disabledContainerColor = Color(0xFF24143A),
+                                                            disabledContentColor = Color(0xFFC29AFF)
+                                                        )
+                                                    ) { Text("JÁ ASSISTI", color = Color.White, fontWeight = FontWeight.Bold) }
+                                                } else {
+                                                    Button(
+                                                        onClick = {
+                                                            lifecycleScope.launch {
+                                                                val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                                if (existing != null) dao.delete(existing)
+                                                            }
+                                                        },
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
+                                                    ) { Text("NA MINHA LISTA • REMOVER", color = Color.White, fontWeight = FontWeight.Bold) }
+                                                }
                                             } else {
                                                 Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                                 (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
