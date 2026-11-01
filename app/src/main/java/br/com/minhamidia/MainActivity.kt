@@ -226,7 +226,8 @@ class MainActivity : ComponentActivity() {
                                 year = item.optString("year"),
                                 posterPath = item.optString("posterPath").takeIf { it.isNotBlank() && it != "null" },
                                 overview = item.optString("overview"),
-                                releaseDate = item.optString("releaseDate")
+                                releaseDate = item.optString("releaseDate"),
+                                tmdbVoteAverage = item.optDouble("tmdbVoteAverage", 0.0)
                             )
                         }
                     }.getOrDefault(emptyList())
@@ -266,7 +267,7 @@ class MainActivity : ComponentActivity() {
                             items.forEach { item ->
                                 put(JSONObject().put("id", item.id).put("title", item.title).put("type", item.type)
                                     .put("year", item.year).put("posterPath", item.posterPath)
-                                    .put("overview", item.overview).put("releaseDate", item.releaseDate))
+                                    .put("overview", item.overview).put("releaseDate", item.releaseDate).put("tmdbVoteAverage", item.tmdbVoteAverage)
                             }
                         }.toString()
                         if (recommendedMovies.isNotEmpty() || recommendedShows.isNotEmpty()) {
@@ -513,6 +514,7 @@ class MainActivity : ComponentActivity() {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(selectedTitle.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                                     Text("${if (selectedTitle.type == "tv") "Série" else "Filme"} • ${selectedTitle.year}", color = Muted)
+                                                    Text(tmdbRatingLabel(selectedTitle.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                                     Spacer(Modifier.height(8.dp))
                                                     Text(selectedTitle.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
                                                 }
@@ -798,7 +800,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                         ) {
                                             CompactMediaCard(media, Modifier.fillMaxWidth(), onRemove = { lifecycleScope.launch { dao.delete(media) } }) {
-                                                detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate)
+                                                detailItem = TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage)
                                                 detailReturnPage = "Minha lista"
                                                 detailSeasons = media.seasonProgress.ifBlank { "[]" }
                                                 navigateTo("Detalhes")
@@ -942,7 +944,7 @@ class MainActivity : ComponentActivity() {
                                     Row(
                                         Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(18.dp))
                                             .clickable {
-                                                detailItem = TmdbResult(featured.tmdbId ?: 0, featured.title, featured.mediaType, featured.year, featured.posterPath, featured.overview, featured.releaseDate)
+                                                detailItem = TmdbResult(featured.tmdbId ?: 0, featured.title, featured.mediaType, featured.year, featured.posterPath, featured.overview, featured.releaseDate, featured.tmdbVoteAverage)
                                                 detailReturnPage = "Início"
                                                 detailSeasons = featured.seasonProgress.ifBlank { "[]" }
                                                 navigateTo("Detalhes")
@@ -1352,6 +1354,8 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
 )
 
 
+private fun tmdbRatingLabel(value: Double): String = if (value > 0.0) "★ %.1f/10 • TMDB".format(java.util.Locale.US, value) else "★ Sem avaliação TMDB"
+
 @Composable
 private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1369,6 +1373,7 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
+        Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 @Composable
@@ -1401,6 +1406,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
         }
         Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
+        Text(tmdbRatingLabel(media.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
         TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
     }
 }
@@ -1417,6 +1423,7 @@ private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
         Text(item.year.ifBlank { "Em alta" }, color = Muted, fontSize = 10.sp)
+        Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1428,6 +1435,7 @@ private fun SearchCard(item: TmdbResult, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(item.title, color = TextMain, fontWeight = FontWeight.Bold)
             Text("${if (item.type == "tv") "Série" else "Filme"} • ${item.year.ifBlank { "Ano indisponível" }}", color = Muted, fontSize = 12.sp)
+            Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             if (item.overview.isNotBlank()) Text(item.overview, color = Muted, fontSize = 11.sp, maxLines = 3)
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -1445,6 +1453,7 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
             Column(Modifier.weight(1f)) {
                 Text(media.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("${if (media.mediaType == "tv") "Série" else "Filme"} • ${media.year}", color = Muted, fontSize = 12.sp)
+                Text(tmdbRatingLabel(media.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (media.overview.isNotBlank()) Text(media.overview, color = Muted, fontSize = 12.sp, maxLines = 3, modifier = Modifier.padding(top = 4.dp))
                 TextButton(onClick = onFavorite, contentPadding = PaddingValues(0.dp)) { Text(if (favorite) "♥ Favorito" else "♡ Favoritar", color = Purple) }
             }
