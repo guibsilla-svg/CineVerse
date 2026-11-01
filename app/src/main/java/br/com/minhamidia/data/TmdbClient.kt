@@ -148,7 +148,7 @@ object TmdbClient {
                         if (error.contains("Invalid API key", true)) throw IllegalStateException("Chave OMDb inválida. Confira e salve novamente em Configurações.")
                         throw IllegalStateException(error)
                     }
-                    json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
+                    return json.optString("imdbRating").toDoubleOrNull()?.takeIf { it in 0.0..10.0 } ?: 0.0
                 } finally { connection.disconnect() }
             }
             if (!imdbId.isNullOrBlank()) {
