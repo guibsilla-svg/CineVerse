@@ -202,15 +202,25 @@ class MainActivity : ComponentActivity() {
                                 if (rating > 0.0) {
                                     detailItem = selected.copy(imdbRating = rating)
                                     imdbStatus = ""
+                                    prefs.edit()
+                                        .putFloat("omdb_rating_${selected.type}_${selected.id}", rating.toFloat())
+                                        .putLong("omdb_checked_${selected.type}_${selected.id}", System.currentTimeMillis())
+                                        .apply()
+                                    results = results.map { if (it.id == selected.id && it.type == selected.type) it.copy(imdbRating = rating) else it }
+                                    exploreResults = exploreResults.map { if (it.id == selected.id && it.type == selected.type) it.copy(imdbRating = rating) else it }
+                                    recommendedMovies = recommendedMovies.map { if (it.id == selected.id && it.type == selected.type) it.copy(imdbRating = rating) else it }
+                                    recommendedShows = recommendedShows.map { if (it.id == selected.id && it.type == selected.type) it.copy(imdbRating = rating) else it }
                                 } else {
                                     imdbStatus = "O OMDb não retornou uma nota IMDb para este título."
                                 }
                             }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
                         } catch (e: Exception) {
                             imdbStatus = e.message ?: "Falha ao consultar o IMDb. Verifique a conexão e a chave OMDb."
                         }
                     }
-                } else if (selected?.imdbRating ?: 0.0 > 0.0) {
+                } else if ((selected?.imdbRating ?: 0.0) > 0.0) {
                     imdbStatus = ""
                 }
             }
@@ -227,17 +237,20 @@ class MainActivity : ComponentActivity() {
             var seasonProgressInput by remember { mutableStateOf("") }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+            // A lista de alvos não depende da nota: atualizar uma avaliação não pode
+            // alterar a chave do efeito e cancelar a fila de consultas em andamento.
             val ratingTargets = remember(all, results, exploreResults, recommendedMovies, recommendedShows) {
-                (results + exploreResults + recommendedMovies + recommendedShows).distinctBy { "${it.type}-${it.id}" }
-                    .filter { it.imdbRating <= 0.0 } +
-                    all.filter { it.imdbRating <= 0.0 && it.tmdbId != null }
-                        .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage) }
+                (results + exploreResults + recommendedMovies + recommendedShows).distinctBy { "${it.type}-${it.id}" } +
+                    all.filter { it.tmdbId != null }
+                        .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage, imdbRating = media.imdbRating) }
             }
             val ratingTargetKey = ratingTargets.distinctBy { "${it.type}-${it.id}" }
                 .joinToString("|") { "${it.type}-${it.id}" }
             LaunchedEffect(imdbApiKey, apiKey, ratingTargetKey) {
                 if (imdbApiKey.isNotBlank()) {
                     ratingTargets.distinctBy { "${it.type}-${it.id}" }.forEach { target ->
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        if (target.imdbRating > 0.0) return@forEach
                         val cacheKey = "omdb_rating_${target.type}_${target.id}"
                         val checkedKey = "omdb_checked_${target.type}_${target.id}"
                         val cachedRating = prefs.getFloat(cacheKey, 0f).toDouble()
@@ -248,11 +261,13 @@ class MainActivity : ComponentActivity() {
                             cachedRating > 0.0 -> cachedRating
                             isFresh -> 0.0
                             else -> {
-                                val lookup = runCatching {
-                                    TmdbClient.imdbRating(target.id, target.title, target.year, target.type, apiKey, imdbApiKey)
-                                }
-                                lookup.exceptionOrNull()?.let { error ->
+                                val lookup = try {
+                                    Result.success(TmdbClient.imdbRating(target.id, target.title, target.year, target.type, apiKey, imdbApiKey))
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
                                     imdbStatus = error.message ?: "Falha ao consultar as notas IMDb."
+                                    Result.failure(error)
                                 }
                                 lookup.getOrDefault(0.0).also { value ->
                                     if (lookup.isSuccess) {
