@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
             var recommendationsError by remember { mutableStateOf("") }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var showKey by remember { mutableStateOf(false) }
+            var imdbApiKey by remember { mutableStateOf(prefs.getString("omdb_key", "") ?: "") }
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
             var showRouletteDialog by remember { mutableStateOf(false) }
@@ -184,6 +185,18 @@ class MainActivity : ComponentActivity() {
                 } else {
                     detailTrailer = null
                     detailTrailerLoading = false
+                }
+            }
+
+            LaunchedEffect(page, detailItem?.id, detailItem?.type, imdbApiKey) {
+                val selected = detailItem
+                if (page == "Detalhes" && selected != null && imdbApiKey.isNotBlank() && selected.imdbRating <= 0.0) {
+                    val rating = runCatching {
+                        TmdbClient.imdbRating(selected.title, selected.year, selected.type, imdbApiKey)
+                    }.getOrDefault(0.0)
+                    if (rating > 0.0 && detailItem?.id == selected.id && detailItem?.type == selected.type) {
+                        detailItem = selected.copy(imdbRating = rating)
+                    }
                 }
             }
             BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
@@ -514,7 +527,7 @@ class MainActivity : ComponentActivity() {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(selectedTitle.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                                     Text("${if (selectedTitle.type == "tv") "Série" else "Filme"} • ${selectedTitle.year}", color = Muted)
-                                                    Text(tmdbRatingLabel(selectedTitle.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                    Text(imdbRatingLabel(selectedTitle.imdbRating), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                                     Spacer(Modifier.height(8.dp))
                                                     Text(selectedTitle.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
                                                 }
@@ -914,6 +927,11 @@ class MainActivity : ComponentActivity() {
                                 Text("ACESSO OFFLINE", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("Sua coleção, avaliações, favoritos e progresso ficam salvos localmente. Esses dados continuam disponíveis sem internet; novas buscas, pôsteres não armazenados e atualizações do catálogo exigem conexão.", color = Muted, fontSize = 12.sp)
                                 Divider(color = Muted.copy(alpha = .25f))
+                                Text("AVALIAÇÕES IMDb", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("A nota oficial do IMDb é consultada pelo OMDb quando você abre os detalhes de um título.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                OutlinedTextField(value = imdbApiKey, onValueChange = { imdbApiKey = it.trim() }, modifier = Modifier.fillMaxWidth(), label = { Text("Chave OMDb API") }, singleLine = true)
+                                Button(onClick = { prefs.edit().putString("omdb_key", imdbApiKey.trim()).apply(); message = "Chave OMDb salva neste aparelho." }, enabled = imdbApiKey.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Salvar chave IMDb") }
+                                Divider(color = Muted.copy(alpha = .25f))
                                 Text("INTEGRAÇÃO TMDB", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("A chave fica salva neste aparelho e é usada para buscar títulos, sinopses e pôsteres.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 Button(onClick = { showKey = true }, modifier = Modifier.fillMaxWidth()) { Text(if (apiKey.isBlank()) "Configurar chave TMDB" else "Alterar chave TMDB") }
@@ -958,7 +976,7 @@ class MainActivity : ComponentActivity() {
                                         Column(Modifier.weight(1f)) {
                                             Text(featured.title, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                             Text("${if (featured.mediaType == "tv") "Série" else "Filme"} • ${featured.year}", color = Muted, fontSize = 12.sp)
-                                             Text(tmdbRatingLabel(featured.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                             Text("★ IMDb: consultar nos detalhes", color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             Text("Título selecionado nas configurações", color = palette.third, fontSize = 11.sp)
                                         }
                                     }
@@ -1355,7 +1373,7 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
 )
 
 
-private fun tmdbRatingLabel(value: Double): String = if (value > 0.0) "★ %.1f/10 • TMDB".format(java.util.Locale.US, value) else "★ Sem avaliação TMDB"
+private fun imdbRatingLabel(value: Double): String = if (value > 0.0) "★ %.1f/10 • IMDb".format(java.util.Locale.US, value) else "★ IMDb: consulte nos detalhes"
 
 @Composable
 private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
@@ -1374,7 +1392,7 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
-        Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(imdbRatingLabel(item.imdbRating), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 @Composable
@@ -1407,7 +1425,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
         }
         Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
-        Text(tmdbRatingLabel(media.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text("★ IMDb: consultar nos detalhes", color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
         TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
     }
 }
@@ -1424,7 +1442,7 @@ private fun RecommendationCard(item: TmdbResult, onOpen: () -> Unit) {
         }
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2)
         Text(item.year.ifBlank { "Em alta" }, color = Muted, fontSize = 10.sp)
-        Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(imdbRatingLabel(item.imdbRating), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1436,7 +1454,7 @@ private fun SearchCard(item: TmdbResult, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(item.title, color = TextMain, fontWeight = FontWeight.Bold)
             Text("${if (item.type == "tv") "Série" else "Filme"} • ${item.year.ifBlank { "Ano indisponível" }}", color = Muted, fontSize = 12.sp)
-            Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(imdbRatingLabel(item.imdbRating), color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             if (item.overview.isNotBlank()) Text(item.overview, color = Muted, fontSize = 11.sp, maxLines = 3)
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -1454,7 +1472,7 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
             Column(Modifier.weight(1f)) {
                 Text(media.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("${if (media.mediaType == "tv") "Série" else "Filme"} • ${media.year}", color = Muted, fontSize = 12.sp)
-                Text(tmdbRatingLabel(media.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("★ IMDb: consultar nos detalhes", color = Color(0xFFFFD166), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (media.overview.isNotBlank()) Text(media.overview, color = Muted, fontSize = 12.sp, maxLines = 3, modifier = Modifier.padding(top = 4.dp))
                 TextButton(onClick = onFavorite, contentPadding = PaddingValues(0.dp)) { Text(if (favorite) "♥ Favorito" else "♡ Favoritar", color = Purple) }
             }
