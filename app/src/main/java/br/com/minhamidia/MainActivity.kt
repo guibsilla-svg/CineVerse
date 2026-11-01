@@ -267,7 +267,7 @@ class MainActivity : ComponentActivity() {
                             items.forEach { item ->
                                 put(JSONObject().put("id", item.id).put("title", item.title).put("type", item.type)
                                     .put("year", item.year).put("posterPath", item.posterPath)
-                                    .put("overview", item.overview).put("releaseDate", item.releaseDate).put("tmdbVoteAverage", item.tmdbVoteAverage)
+                                     .put("overview", item.overview).put("releaseDate", item.releaseDate).put("tmdbVoteAverage", item.tmdbVoteAverage))
                             }
                         }.toString()
                         if (recommendedMovies.isNotEmpty() || recommendedShows.isNotEmpty()) {
