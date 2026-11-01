@@ -526,7 +526,6 @@ class MainActivity : ComponentActivity() {
                                                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                                                 type = "image/png"
                                                                 putExtra(Intent.EXTRA_STREAM, imageUri)
-                                                                putExtra(Intent.EXTRA_TEXT, "Minha recomendação do CineVerso: ${selectedTitle.title} (${selectedTitle.year}).")
                                                                 clipData = android.content.ClipData.newUri(contentResolver, "Card CineVerso", imageUri)
                                                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                             }
