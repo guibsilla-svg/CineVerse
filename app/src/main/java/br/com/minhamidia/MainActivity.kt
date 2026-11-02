@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -206,6 +207,7 @@ class MainActivity : ComponentActivity() {
             var exploreSearchLoadedKey by remember { mutableStateOf("") }
             var exploreCatalogLoadedKey by remember { mutableStateOf("") }
             val exploreListState = rememberLazyListState()
+            val myListGridState = rememberLazyGridState()
             val rouletteWheelRotation = remember { Animatable(0f) }
             val rouletteScope = rememberCoroutineScope()
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
@@ -700,7 +702,7 @@ class MainActivity : ComponentActivity() {
                                                                 )
                                                             }
                                                             dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
-                                                            page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage
+                                                            // Mantém a tela de detalhes aberta após salvar o status; o usuário volta manualmente.
                                                         }
                                                     }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                                                 }
@@ -835,6 +837,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                                     columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                                    state = myListGridState,
                                     modifier = Modifier.weight(1f),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
