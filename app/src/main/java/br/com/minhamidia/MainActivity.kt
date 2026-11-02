@@ -85,6 +85,19 @@ private fun cinePalette(name: String): Triple<Color, Color, Color> = when (name)
 }
 
 
+private fun markAllSeriesEpisodesWatched(progressJson: String): String {
+    val seasons = runCatching { JSONArray(progressJson) }.getOrElse { JSONArray() }
+    for (i in 0 until seasons.length()) {
+        val season = seasons.optJSONObject(i) ?: continue
+        season.put("status", "WATCHED")
+        val episodes = season.optJSONArray("episodeList") ?: continue
+        for (j in 0 until episodes.length()) {
+            episodes.optJSONObject(j)?.put("watched", true)
+        }
+    }
+    return seasons.toString()
+}
+
 private fun mergeSavedSeasonProgress(importedJson: String, savedJson: String): String {
     val fresh = JSONArray(importedJson)
     val saved = runCatching { JSONArray(savedJson) }.getOrNull() ?: return fresh.toString()
@@ -673,6 +686,18 @@ class MainActivity : ComponentActivity() {
                                                                 var episodes = 0
                                                                 for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0
                                                                 media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
+                                                            }
+                                                            if (selectedTitle.type == "tv" && status == "WATCHED") {
+                                                                val completedProgress = markAllSeriesEpisodesWatched(media.seasonProgress.ifBlank { detailSeasons })
+                                                                val completedSeasons = JSONArray(completedProgress)
+                                                                val seasonCount = (0 until completedSeasons.length()).count { (completedSeasons.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
+                                                                val episodeCount = (0 until completedSeasons.length()).sumOf { completedSeasons.optJSONObject(it)?.optJSONArray("episodeList")?.length() ?: 0 }
+                                                                media = media.copy(
+                                                                    totalSeasons = seasonCount,
+                                                                    totalEpisodes = episodeCount,
+                                                                    watchedEpisodes = episodeCount,
+                                                                    seasonProgress = completedProgress
+                                                                )
                                                             }
                                                             dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
                                                             page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage
