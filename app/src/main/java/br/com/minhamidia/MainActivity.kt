@@ -677,8 +677,8 @@ class MainActivity : ComponentActivity() {
                                                                         totalEpisodes = episodeCount,
                                                                         watchedEpisodes = episodeCount,
                                                                         seasonProgress = completedProgress
+                                                                        )
                                                                         detailSeasons = completedProgress
-                                                                    )
                                                                 }
                                                                 dao.insert(media.copy(status = newStatus, watchedAt = if (newStatus == "WATCHED") System.currentTimeMillis() else media.watchedAt))
                                                             }
@@ -725,8 +725,8 @@ class MainActivity : ComponentActivity() {
                                                                     totalEpisodes = episodeCount,
                                                                     watchedEpisodes = episodeCount,
                                                                     seasonProgress = completedProgress
+                                                                    )
                                                                     detailSeasons = completedProgress
-                                                                )
                                                             }
                                                             dao.insert(media.copy(status = status, watchedAt = if (status == "WATCHED") System.currentTimeMillis() else media.watchedAt))
                                                             // Mantém a tela de detalhes aberta após salvar o status; o usuário volta manualmente.
