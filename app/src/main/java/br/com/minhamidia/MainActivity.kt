@@ -1,6 +1,13 @@
 package br.com.minhamidia
 
 import android.content.Intent
+import android.app.DownloadManager
+import android.os.Environment
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.FileProvider
+import java.io.File
+import android.widget.Toast
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -57,6 +64,7 @@ import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -120,6 +128,83 @@ private fun mergeSavedSeasonProgress(importedJson: String, savedJson: String): S
 }
 
 class MainActivity : ComponentActivity() {
+    private fun installUpdateFile(file: File) {
+        if (!file.exists()) {
+            Toast.makeText(this, "O arquivo da atualização não foi encontrado. Tente novamente.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            getSharedPreferences("cineverse_settings", MODE_PRIVATE).edit()
+                .putString("pending_update_apk", file.absolutePath).apply()
+            Toast.makeText(this, "Autorize a instalação do CineVerso nesta tela e volte ao aplicativo.", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return
+        }
+        runCatching {
+            val contentUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+        }.onFailure {
+            Toast.makeText(this, "Não foi possível abrir o instalador. Verifique a permissão para instalar apps.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun downloadAndInstallUpdate(url: String, version: String) {
+        runCatching {
+            val fileName = "cineverso-update-$version.apk"
+            val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle("Atualizando CineVerso")
+                .setDescription("Baixando a versão $version")
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val downloadId = manager.enqueue(request)
+            Toast.makeText(this, "Baixando atualização $version. Você será avisado quando estiver pronta.", Toast.LENGTH_LONG).show()
+            lifecycleScope.launch {
+                var finished = false
+                while (!finished) {
+                    val cursor = manager.query(DownloadManager.Query().setFilterById(downloadId))
+                    if (cursor != null) {
+                        if (cursor.moveToFirst()) {
+                            when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                                DownloadManager.STATUS_SUCCESSFUL -> {
+                                    val file = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+                                    installUpdateFile(file)
+                                    finished = true
+                                }
+                                DownloadManager.STATUS_FAILED -> {
+                                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                                    Toast.makeText(this@MainActivity, "Falha ao baixar a atualização (código $reason). Tente novamente mais tarde.", Toast.LENGTH_LONG).show()
+                                    finished = true
+                                }
+                            }
+                        }
+                        cursor.close()
+                    }
+                    if (!finished) delay(1000)
+                }
+            }
+        }.onFailure {
+            Toast.makeText(this, "Não foi possível iniciar o download da atualização.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("cineverse_settings", MODE_PRIVATE)
+        val pendingPath = prefs.getString("pending_update_apk", null) ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+            prefs.edit().remove("pending_update_apk").apply()
+            installUpdateFile(File(pendingPath))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val dao = AppDatabase.get(this).mediaDao()
@@ -130,27 +215,39 @@ class MainActivity : ComponentActivity() {
         WorkManager.getInstance(this).enqueueUniquePeriodicWork("cineverse_episode_alerts", ExistingPeriodicWorkPolicy.KEEP, alertWork)
         setContent {
             val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-            var updateVersion by remember { mutableStateOf<String?>(null) }
-            var updateApkUrl by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(Unit) {
                 val release = withContext(Dispatchers.IO) {
                     runCatching {
-                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases/latest").openConnection() as HttpURLConnection).apply {
+                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases?per_page=100").openConnection() as HttpURLConnection).apply {
                             connectTimeout = 10000
                             readTimeout = 10000
                             setRequestProperty("Accept", "application/vnd.github+json")
                             setRequestProperty("User-Agent", "CineVerso-Android")
                         }
                         try {
-                            val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-                            val tag = json.optString("tag_name").removePrefix("v")
-                            val assets = json.optJSONArray("assets")
-                            val apk = assets?.let { array -> (0 until array.length()).map { array.getJSONObject(it) }.firstOrNull { it.optString("name") == "cineverse.apk" }?.optString("browser_download_url") }
-                            if (tag.isNotBlank() && apk?.startsWith("https://") == true && compareVersions(tag, BuildConfig.VERSION_NAME) > 0) tag to apk else null
+                            val releases = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+                            val v1Release = (0 until releases.length())
+                                .map { releases.getJSONObject(it) }
+                                .firstOrNull {
+                                    it.optString("tag_name").removePrefix("v").startsWith("1.0.") &&
+                                        !it.optBoolean("draft") && !it.optBoolean("prerelease")
+                                }
+                            val tag = v1Release?.optString("tag_name")?.removePrefix("v").orEmpty()
+                            val assets = v1Release?.optJSONArray("assets")
+                            val apk = assets?.let { array ->
+                                (0 until array.length()).map { array.getJSONObject(it) }
+                                    .firstOrNull { it.optString("name") == "cineverse.apk" }
+                                    ?.optString("browser_download_url")
+                            }
+                            if (tag.isNotBlank() && apk?.startsWith("https://") == true &&
+                                compareVersions(tag, BuildConfig.VERSION_NAME) > 0
+                            ) tag to apk else null
                         } finally { connection.disconnect() }
                     }.getOrNull()
                 }
-                if (release != null) { updateVersion = release.first; updateApkUrl = release.second }
+                if (release != null) {
+                    downloadAndInstallUpdate(release.second, release.first)
+                }
             }
             val palette = cinePalette("Roxo")
             var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
@@ -1422,19 +1519,6 @@ class MainActivity : ComponentActivity() {
                             editingSeries = null
                         }) { Text("Salvar") } },
                         dismissButton = { TextButton(onClick = { editingSeries = null }) { Text("Cancelar") } })
-                }
-                if (updateVersion != null && updateApkUrl != null) {
-                    AlertDialog(
-                        onDismissRequest = { updateVersion = null; updateApkUrl = null },
-                        title = { Text("Atualização disponível") },
-                        text = { Text("O CineVerso " + updateVersion + " está disponível. Baixe a nova versão e instale por cima da atual, sem desinstalar o aplicativo.") },
-                        confirmButton = { TextButton(onClick = {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateApkUrl)))
-                            updateVersion = null
-                            updateApkUrl = null
-                        }) { Text("Baixar atualização") } },
-                        dismissButton = { TextButton(onClick = { updateVersion = null; updateApkUrl = null }) { Text("Depois") } }
-                    )
                 }
                 if (showKey) {
                     AlertDialog(onDismissRequest = { showKey = false }, title = { Text("Credencial da API TMDB") },
