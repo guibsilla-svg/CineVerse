@@ -627,7 +627,14 @@ class MainActivity : ComponentActivity() {
                                                         },
                                                         modifier = Modifier.fillMaxWidth(),
                                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
-                                                    ) { Text("NA MINHA LISTA • REMOVER", color = Color.White, fontWeight = FontWeight.Bold) }
+                                                    ) {
+                                                        val savedStatusLabel = when (savedTitle.status) {
+                                                            "WATCHING" -> "TÔ ASSISTINDO"
+                                                            "WATCHED" -> "JÁ ASSISTI"
+                                                            else -> "NA MINHA LISTA"
+                                                        }
+                                                        Text("$savedStatusLabel • REMOVER", color = Color.White, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                             } else {
                                                 Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
