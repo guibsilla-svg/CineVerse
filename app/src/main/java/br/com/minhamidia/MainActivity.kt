@@ -84,6 +84,27 @@ private fun cinePalette(name: String): Triple<Color, Color, Color> = when (name)
     else -> Triple(Night, Panel, Purple)
 }
 
+
+private fun mergeSavedSeasonProgress(importedJson: String, savedJson: String): String {
+    val fresh = JSONArray(importedJson)
+    val saved = runCatching { JSONArray(savedJson) }.getOrNull() ?: return fresh.toString()
+    for (i in 0 until fresh.length()) {
+        val season = fresh.optJSONObject(i) ?: continue
+        val oldSeason = (0 until saved.length()).mapNotNull { saved.optJSONObject(it) }
+            .firstOrNull { it.optInt("number") == season.optInt("number") } ?: continue
+        season.put("status", oldSeason.optString("status", "WATCHLIST"))
+        val oldEpisodes = oldSeason.optJSONArray("episodeList") ?: continue
+        val newEpisodes = season.optJSONArray("episodeList") ?: continue
+        for (e in 0 until newEpisodes.length()) {
+            val episode = newEpisodes.optJSONObject(e) ?: continue
+            val oldEpisode = (0 until oldEpisodes.length()).mapNotNull { oldEpisodes.optJSONObject(it) }
+                .firstOrNull { it.optInt("number") == episode.optInt("number") }
+            if (oldEpisode != null) episode.put("watched", oldEpisode.optBoolean("watched", false))
+        }
+    }
+    return fresh.toString()
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -465,14 +486,16 @@ class MainActivity : ComponentActivity() {
                                             items(exploreResults.chunked(3), key = { row -> "explore-" + (row.firstOrNull()?.id ?: 0) }) { rowItems ->
                                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                                     rowItems.forEach { item ->
-                                                        val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
-                                                        ExploreMediaCard(item, Modifier.weight(1f)) {
+                                                        val savedMedia = all.firstOrNull { it.tmdbId == item.id && it.mediaType == item.type }
+                                                        ExploreMediaCard(item, savedMedia, Modifier.weight(1f)) {
                                                             detailItem = item
                                                             detailReturnPage = "Explorar"
                                                             navigateTo("Detalhes")
                                                             if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                                 detailLoading = true
-                                                                detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                                val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                                val savedProgress = dao.findByTmdbId(item.id, "tv")?.seasonProgress.orEmpty()
+                                                                detailSeasons = mergeSavedSeasonProgress(imported, savedProgress)
                                                                 detailLoading = false
                                                             }
                                                         }
@@ -511,7 +534,9 @@ class MainActivity : ComponentActivity() {
                                             navigateTo("Detalhes")
                                             if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                 detailLoading = true
-                                                detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                val savedProgress = dao.findByTmdbId(item.id, "tv")?.seasonProgress.orEmpty()
+                                                detailSeasons = mergeSavedSeasonProgress(imported, savedProgress)
                                                 detailLoading = false
                                             }
                                         })
@@ -1042,7 +1067,9 @@ class MainActivity : ComponentActivity() {
                                                 navigateTo("Detalhes")
                                                 if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                     detailLoading = true
-                                                    detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                    val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                    val savedProgress = dao.findByTmdbId(item.id, "tv")?.seasonProgress.orEmpty()
+                                                    detailSeasons = mergeSavedSeasonProgress(imported, savedProgress)
                                                     detailLoading = false
                                                 }
                                             }
@@ -1062,7 +1089,9 @@ class MainActivity : ComponentActivity() {
                                                 navigateTo("Detalhes")
                                                 if (item.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                                     detailLoading = true
-                                                    detailSeasons = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                    val imported = runCatching { TmdbClient.seriesSeasons(item.id, apiKey) }.getOrDefault("[]")
+                                                    val savedProgress = dao.findByTmdbId(item.id, "tv")?.seasonProgress.orEmpty()
+                                                    detailSeasons = mergeSavedSeasonProgress(imported, savedProgress)
                                                     detailLoading = false
                                                 }
                                             }
@@ -1299,7 +1328,9 @@ class MainActivity : ComponentActivity() {
                                     navigateTo("Detalhes")
                                     if (picked.type == "tv" && apiKey.isNotBlank()) lifecycleScope.launch {
                                         detailLoading = true
-                                        detailSeasons = runCatching { TmdbClient.seriesSeasons(picked.id, apiKey) }.getOrDefault("[]")
+                                        val imported = runCatching { TmdbClient.seriesSeasons(picked.id, apiKey) }.getOrDefault("[]")
+                                        val savedProgress = dao.findByTmdbId(picked.id, "tv")?.seasonProgress.orEmpty()
+                                        detailSeasons = mergeSavedSeasonProgress(imported, savedProgress)
                                         detailLoading = false
                                     }
                                 }) { Text("Ver detalhes") }
@@ -1386,7 +1417,7 @@ private fun exploreGenres(type: String): List<Pair<String, Int?>> = if (type == 
 private fun tmdbRatingLabel(value: Double): String = if (value > 0.0) "★ %.0f%% • TMDB".format(java.util.Locale.US, (value * 10.0).coerceIn(0.0, 100.0)) else "★ Sem avaliação TMDB"
 
 @Composable
-private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+private fun ExploreMediaCard(item: TmdbResult, savedMedia: MediaItem?, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Column(modifier.clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         if (!item.posterPath.isNullOrBlank()) {
             AsyncImage(
@@ -1403,6 +1434,17 @@ private fun ExploreMediaCard(item: TmdbResult, modifier: Modifier = Modifier, on
         Text(item.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(item.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
         Text(tmdbRatingLabel(item.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        if (savedMedia != null) {
+            val label = when (savedMedia.status) {
+                "WATCHED" -> "JÁ ASSISTI"
+                "WATCHING" -> "TÔ ASSISTINDO"
+                else -> "QUERO ASSISTIR"
+            }
+            Text(label, color = Purple, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            if (item.type == "tv" && savedMedia.totalEpisodes > 0) {
+                Text("${savedMedia.watchedEpisodes}/${savedMedia.totalEpisodes} episódios", color = Muted, fontSize = 9.sp, maxLines = 1)
+            }
+        }
     }
 }
 @Composable
