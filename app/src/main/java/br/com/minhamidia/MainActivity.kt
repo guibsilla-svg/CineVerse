@@ -647,35 +647,60 @@ class MainActivity : ComponentActivity() {
                                             Spacer(Modifier.height(4.dp))
                                             val savedTitle = all.firstOrNull { it.tmdbId == selectedTitle.id && it.mediaType == selectedTitle.type }
                                             if (savedTitle != null) {
-                                                if (savedTitle.status == "WATCHED") {
-                                                    Button(
-                                                        onClick = {},
-                                                        enabled = false,
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        colors = ButtonDefaults.buttonColors(
-                                                            disabledContainerColor = Color(0xFF24143A),
-                                                            disabledContentColor = Color(0xFFC29AFF)
-                                                        )
-                                                    ) { Text("JÁ ASSISTI", color = Color.White, fontWeight = FontWeight.Bold) }
+                                                val statusOptions = if (selectedTitle.type == "tv") {
+                                                    listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti")
                                                 } else {
+                                                    listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")
+                                                }
+                                                val currentStatusLabel = statusOptions.firstOrNull { it.first == savedTitle.status }?.second ?: "Na minha lista"
+                                                Text("NA MINHA LISTA • STATUS ATUAL: $currentStatusLabel", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                statusOptions.forEach { (newStatus, label) ->
                                                     Button(
                                                         onClick = {
                                                             lifecycleScope.launch {
                                                                 val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
-                                                                if (existing != null) dao.delete(existing)
+                                                                var media = existing ?: selectedTitle.toMediaItem()
+                                                                if (selectedTitle.type == "tv" && newStatus == "WATCHED") {
+                                                                    if (media.seasonProgress.isBlank() && apiKey.isNotBlank()) {
+                                                                        val imported = runCatching { TmdbClient.seriesSeasons(selectedTitle.id, apiKey) }.getOrDefault("[]")
+                                                                        val seasons = JSONArray(imported)
+                                                                        var episodes = 0
+                                                                        for (i in 0 until seasons.length()) episodes += seasons.optJSONObject(i)?.optInt("episodes", 0) ?: 0
+                                                                        media = media.copy(totalSeasons = (0 until seasons.length()).count { seasons.optJSONObject(it)?.optInt("number", 0) ?: 0 > 0 }, totalEpisodes = episodes, seasonProgress = imported)
+                                                                    }
+                                                                    val completedProgress = markAllSeriesEpisodesWatched(media.seasonProgress.ifBlank { detailSeasons })
+                                                                    val completedSeasons = JSONArray(completedProgress)
+                                                                    val seasonCount = (0 until completedSeasons.length()).count { (completedSeasons.optJSONObject(it)?.optInt("number") ?: 0) > 0 }
+                                                                    val episodeCount = (0 until completedSeasons.length()).sumOf { completedSeasons.optJSONObject(it)?.optJSONArray("episodeList")?.length() ?: 0 }
+                                                                    media = media.copy(
+                                                                        totalSeasons = seasonCount,
+                                                                        totalEpisodes = episodeCount,
+                                                                        watchedEpisodes = episodeCount,
+                                                                        seasonProgress = completedProgress
+                                                                    )
+                                                                }
+                                                                dao.insert(media.copy(status = newStatus, watchedAt = if (newStatus == "WATCHED") System.currentTimeMillis() else media.watchedAt))
                                                             }
                                                         },
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = if (savedTitle.status == newStatus) Color(0xFF35105F) else Color(0xFF2A2040),
+                                                            contentColor = Color.White
+                                                        )
                                                     ) {
-                                                        val savedStatusLabel = when (savedTitle.status) {
-                                                            "WATCHING" -> "TÔ ASSISTINDO"
-                                                            "WATCHED" -> "JÁ ASSISTI"
-                                                            else -> "NA MINHA LISTA"
-                                                        }
-                                                        Text("$savedStatusLabel • REMOVER", color = Color.White, fontWeight = FontWeight.Bold)
+                                                        Text(if (savedTitle.status == newStatus) "$label • ATUAL" else label, fontWeight = FontWeight.Bold)
                                                     }
                                                 }
+                                                Button(
+                                                    onClick = {
+                                                        lifecycleScope.launch {
+                                                            val existing = dao.findByTmdbId(selectedTitle.id, selectedTitle.type)
+                                                            if (existing != null) dao.delete(existing)
+                                                        }
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2040), contentColor = Color(0xFFC29AFF))
+                                                ) { Text("REMOVER DA MINHA LISTA", color = Color.White, fontWeight = FontWeight.Bold) }
                                             } else {
                                                 Text("ADICIONAR À MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                                 (if (selectedTitle.type == "tv") listOf("WATCHLIST" to "Quero assistir", "WATCHING" to "Tô assistindo", "WATCHED" to "Já assisti") else listOf("WATCHLIST" to "Quero assistir", "WATCHED" to "Já assisti")).forEach { (status, label) ->
