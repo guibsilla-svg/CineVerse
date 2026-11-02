@@ -228,9 +228,9 @@ class MainActivity : ComponentActivity() {
                     // Older recommendation caches may contain zero ratings from before
                     // TMDB scores were displayed. Force one fresh fetch after this update.
                     val ratingCacheVersion = prefs.getInt("trending_rating_cache_version", 0)
-                    val cacheValid = ratingCacheVersion >= 1 &&
-                        now - lastUpdate < TimeUnit.HOURS.toMillis(24) &&
-                        !cachedMovies.isNullOrBlank() && !cachedShows.isNullOrBlank()
+                    // Refresh TMDB trending lists on every app launch; do not let a stale
+                    // local cache make the Home screen look permanently unchanged.
+                    val cacheValid = false
 
                     fun decodeCache(json: String?): List<TmdbResult> = runCatching {
                         val array = JSONArray(json ?: "[]")
