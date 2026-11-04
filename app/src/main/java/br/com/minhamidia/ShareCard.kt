@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -18,6 +19,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 
 private fun downloadShareImage(url: String): Bitmap? = runCatching {
     val connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -32,134 +36,136 @@ private fun downloadShareImage(url: String): Bitmap? = runCatching {
     }
 }.getOrNull()
 
+private fun drawCentered(canvas: Canvas, paint: Paint, text: String, y: Float, centerX: Float = 540f) {
+    canvas.drawText(text, centerX - paint.measureText(text) / 2f, y, paint)
+}
+
+private fun wrapShareText(text: String, paint: Paint, maxWidth: Float, maxLines: Int): List<String> {
+    val result = mutableListOf<String>()
+    var line = ""
+    for (word in text.split(Regex("\\s+"))) {
+        val candidate = if (line.isEmpty()) word else "$line $word"
+        if (paint.measureText(candidate) > maxWidth && line.isNotEmpty()) {
+            result.add(line)
+            line = word
+            if (result.size == maxLines) break
+        } else line = candidate
+    }
+    if (result.size < maxLines && line.isNotEmpty()) result.add(line)
+    if (result.size == maxLines && text.isNotBlank()) {
+        var last = result.last()
+        while (paint.measureText("$last…") > maxWidth && last.isNotEmpty()) last = last.dropLast(1)
+        result[result.lastIndex] = "$last…"
+    }
+    return result
+}
+
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val width = 1080
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val synopsis = item.overview.ifBlank { "Sinopse indisponível." }
-
-        paint.textSize = 27f
-        paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-        val synopsisLines = mutableListOf<String>()
-        var currentLine = ""
-        for (word in synopsis.split(Regex("\\s+"))) {
-            val candidate = if (currentLine.isEmpty()) word else "$currentLine $word"
-            if (paint.measureText(candidate) > 920f && currentLine.isNotEmpty()) {
-                synopsisLines.add(currentLine)
-                currentLine = word
-            } else {
-                currentLine = candidate
-            }
-        }
-        if (currentLine.isNotEmpty()) synopsisLines.add(currentLine)
-
-        val synopsisStartY = 730f
-        val synopsisLineHeight = 36f
-        val synopsisEndY = synopsisStartY + synopsisLines.size * synopsisLineHeight
-        val contentBottom = synopsisEndY + 30f
-        // The image remains square; its side grows when a long synopsis needs more room.
-        val logicalHeight = maxOf(1080f, contentBottom + 300f)
-        val outputSize = logicalHeight.toInt()
-        val bitmap = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
+        val height = 1500
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val scaleFactor = outputSize / 1080f
-        canvas.scale(scaleFactor, scaleFactor)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
         paint.shader = LinearGradient(
-            0f, 0f, width.toFloat(), 1080f,
-            intArrayOf(0xFF08070D.toInt(), 0xFF241238.toInt(), 0xFF08070D.toInt()),
+            0f, 0f, width.toFloat(), height.toFloat(),
+            intArrayOf(0xFF08060E.toInt(), 0xFF21102F.toInt(), 0xFF0A0711.toInt()),
             null, Shader.TileMode.CLAMP
         )
-        canvas.drawRect(0f, 0f, 1080f, 1080f, paint)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         paint.shader = null
-
-        val poster = item.posterPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w780$it") }
-        val posterRect = RectF(370f, 28f, 710f, 488f)
-        paint.color = 0xFF160D22.toInt()
-        canvas.drawRoundRect(posterRect, 22f, 22f, paint)
-        if (poster != null) {
-            canvas.save()
-            val clip = android.graphics.Path().apply {
-                addRoundRect(posterRect, 22f, 22f, android.graphics.Path.Direction.CW)
-            }
-            canvas.clipPath(clip)
-            val posterScale = maxOf(posterRect.width() / poster.width, posterRect.height() / poster.height)
-            val dstW = poster.width * posterScale
-            val dstH = poster.height * posterScale
-            val dst = RectF(
-                posterRect.centerX() - dstW / 2f, posterRect.centerY() - dstH / 2f,
-                posterRect.centerX() + dstW / 2f, posterRect.centerY() + dstH / 2f
-            )
-            canvas.drawBitmap(poster, null, dst, paint)
-            canvas.restore()
-            poster.recycle()
-        }
-
-        paint.color = android.graphics.Color.WHITE
-        paint.textSize = 52f
-        paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-        val titleLines = mutableListOf<String>()
-        var titleLine = ""
-        for (word in item.title.split(" ")) {
-            val candidate = if (titleLine.isEmpty()) word else "$titleLine $word"
-            if (paint.measureText(candidate) > 940f && titleLine.isNotEmpty()) {
-                titleLines.add(titleLine)
-                titleLine = word
-            } else titleLine = candidate
-        }
-        if (titleLine.isNotEmpty()) titleLines.add(titleLine)
-        var titleY = 555f
-        titleLines.take(2).forEach {
-            canvas.drawText(it, (width - paint.measureText(it)) / 2f, titleY, paint)
-            titleY += 58f
-        }
-
-        paint.color = 0xFFD5C9E4.toInt()
-        paint.textSize = 30f
-        paint.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        val year = item.year.ifBlank { "Ano indisponível" }
-        canvas.drawText(year, (width - paint.measureText(year)) / 2f, 635f, paint)
-
-        val ratingText = if (item.tmdbVoteAverage > 0.0) {
-            "★ %.0f%% • TMDB".format(java.util.Locale.US, (item.tmdbVoteAverage * 10.0).coerceIn(0.0, 100.0))
-        } else {
-            "★ Sem avaliação TMDB"
-        }
-        paint.color = 0xFFFFD166.toInt()
-        paint.textSize = 28f
-        paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        canvas.drawText(ratingText, (width - paint.measureText(ratingText)) / 2f, 680f, paint)
-
-        paint.color = 0xFFE9E2F2.toInt()
-        paint.textSize = 27f
-        paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-        var synopsisY = synopsisStartY
-        synopsisLines.forEach { line ->
-            canvas.drawText(line, (width - paint.measureText(line)) / 2f, synopsisY, paint)
-            synopsisY += synopsisLineHeight
-        }
+        paint.color = 0x229B5CFF
+        canvas.drawCircle(540f, 520f, 520f, paint)
 
         val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
         if (logo != null) {
-            val logoRect = RectF(365f, contentBottom + 30f, 715f, contentBottom + 105f)
-            val logoScale = minOf(logoRect.width() / logo.width, logoRect.height() / logo.height)
-            val dstW = logo.width * logoScale
-            val dstH = logo.height * logoScale
-            val dst = RectF(
-                (width - dstW) / 2f, logoRect.centerY() - dstH / 2f,
-                (width + dstW) / 2f, logoRect.centerY() + dstH / 2f
-            )
-            canvas.drawBitmap(logo, null, dst, paint)
+            val maxW = 330f
+            val maxH = 76f
+            val scale = min(maxW / logo.width, maxH / logo.height)
+            val w = logo.width * scale
+            val h = logo.height * scale
+            canvas.drawBitmap(logo, null, RectF(540f - w / 2f, 34f + (maxH - h) / 2f, 540f + w / 2f, 34f + (maxH + h) / 2f), paint)
             logo.recycle()
         }
 
-        paint.color = 0xFF9B5CFF.toInt()
-        canvas.drawRoundRect(RectF(72f, contentBottom + 125f, 1008f, contentBottom + 210f), 22f, 22f, paint)
+        paint.color = 0xFFB98AFF.toInt()
+        paint.textSize = 22f
+        paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        drawCentered(canvas, paint, "U M A   R E C O M E N D A Ç Ã O   P A R A   V O C Ê", 142f)
+
+        val posterRect = RectF(205f, 174f, 875f, 1080f)
+        paint.color = 0xFF130D1D.toInt()
+        paint.setShadowLayer(28f, 0f, 14f, 0x99000000.toInt())
+        canvas.drawRoundRect(posterRect, 26f, 26f, paint)
+        paint.clearShadowLayer()
+        val poster = item.posterPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w780$it") }
+        if (poster != null) {
+            canvas.save()
+            val clip = Path().apply { addRoundRect(posterRect, 26f, 26f, Path.Direction.CW) }
+            canvas.clipPath(clip)
+            val scale = max(posterRect.width() / poster.width, posterRect.height() / poster.height)
+            val dstW = poster.width * scale
+            val dstH = poster.height * scale
+            canvas.drawBitmap(poster, null, RectF(
+                posterRect.centerX() - dstW / 2f, posterRect.centerY() - dstH / 2f,
+                posterRect.centerX() + dstW / 2f, posterRect.centerY() + dstH / 2f
+            ), paint)
+            canvas.restore()
+            poster.recycle()
+        } else {
+            paint.color = 0xFF2B1B3B.toInt()
+            canvas.drawRoundRect(posterRect, 26f, 26f, paint)
+            paint.color = 0xFFB98AFF.toInt()
+            paint.textSize = 34f
+            paint.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            drawCentered(canvas, paint, "PÔSTER INDISPONÍVEL", 635f)
+        }
+
+        paint.shader = LinearGradient(0f, 850f, 0f, 1080f,
+            intArrayOf(0x00000000, 0xCC08060E.toInt()), null, Shader.TileMode.CLAMP)
+        canvas.drawRect(posterRect.left, 850f, posterRect.right, posterRect.bottom, paint)
+        paint.shader = null
+
         paint.color = android.graphics.Color.WHITE
-        paint.textSize = 36f
+        paint.textSize = 66f
+        paint.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        val titleLines = wrapShareText(item.title, paint, 980f, 2)
+        var titleY = 1160f - (titleLines.size - 1) * 68f
+        titleLines.forEach { line ->
+            drawCentered(canvas, paint, line, titleY)
+            titleY += 72f
+        }
+
+        val metadata = buildList {
+            if (item.year.isNotBlank()) add(item.year)
+            add(if (item.type.equals("tv", true)) "SÉRIE" else "FILME")
+            if (item.tmdbVoteAverage > 0.0) add("★ %.1f/10 TMDB".format(Locale.US, item.tmdbVoteAverage))
+        }.joinToString("   •   ")
+        paint.color = 0xFFD7C9E8.toInt()
+        paint.textSize = 27f
+        paint.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        drawCentered(canvas, paint, metadata, 1210f)
+
+        paint.color = 0xFFE8E1EF.toInt()
+        paint.textSize = 25f
+        paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        val synopsisLines = wrapShareText(item.overview.ifBlank { "Uma história para entrar na sua lista." }, paint, 900f, 3)
+        var synopsisY = 1260f
+        synopsisLines.forEach { line ->
+            drawCentered(canvas, paint, line, synopsisY)
+            synopsisY += 34f
+        }
+
+        val footer = RectF(300f, 1370f, 780f, 1448f)
+        paint.color = 0xFF9B5CFF.toInt()
+        paint.setShadowLayer(18f, 0f, 5f, 0x669B5CFF)
+        canvas.drawRoundRect(footer, 22f, 22f, paint)
+        paint.clearShadowLayer()
+        paint.color = android.graphics.Color.WHITE
+        paint.textSize = 30f
         paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-        val footer = "MINHA INDICAÇÃO"
-        canvas.drawText(footer, (width - paint.measureText(footer)) / 2f, contentBottom + 180f, paint)
+        drawCentered(canvas, paint, "MINHA INDICAÇÃO", 1420f)
 
         val directory = File(context.cacheDir, "shared_recommendations").apply { mkdirs() }
         val output = File(directory, "cineverso_${item.type}_${item.id}.png")
