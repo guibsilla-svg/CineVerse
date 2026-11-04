@@ -30,6 +30,7 @@ data class TmdbResult(
 }
 
 data class TmdbTrailer(val key: String, val name: String, val language: String)
+data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
 object TmdbClient {
     suspend fun search(query: String, credential: String): List<TmdbResult> =
@@ -53,7 +54,7 @@ object TmdbClient {
 
 
 
-    suspend fun catalog(type: String, category: String, page: Int, genreId: Int?, credential: String): List<TmdbResult> {
+    suspend fun catalog(type: String, category: String, page: Int, genreId: Int?, credential: String, yearPeriod: String = "Todos"): List<TmdbResult> {
         val mediaType = if (type == "tv") "tv" else "movie"
         val endpoint = when (category) {
             "popular" -> "/$mediaType/popular"
@@ -63,8 +64,13 @@ object TmdbClient {
             else -> "/trending/$mediaType/week"
         }
         val params = mutableMapOf("language" to "pt-BR", "page" to page.coerceIn(1, 500).toString())
-        if (genreId != null) {
-            params["with_genres"] = genreId.toString()
+        val bounds = yearPeriodBounds(yearPeriod)
+        if (bounds != null) {
+            if (mediaType == "tv") { params["first_air_date.gte"] = bounds.first; params["first_air_date.lte"] = bounds.second }
+            else { params["primary_release_date.gte"] = bounds.first; params["primary_release_date.lte"] = bounds.second }
+        }
+        if (genreId != null || bounds != null) {
+            if (genreId != null) params["with_genres"] = genreId.toString()
             params["sort_by"] = if (category == "top_rated") "vote_average.desc" else "popularity.desc"
             params["vote_count.gte"] = "20"
             params["include_adult"] = "false"
@@ -73,7 +79,7 @@ object TmdbClient {
         return request(endpoint, credential, params)
     }
 
-    suspend fun discoverRandom(type: String, genreId: Int?, year: String?, credential: String): List<TmdbResult> {
+    suspend fun discoverRandom(type: String, genreId: Int?, year: String?, credential: String, originalLanguages: List<String> = emptyList()): List<TmdbResult> {
         val endpoint = if (type == "tv") "/discover/tv" else "/discover/movie"
         val base = mutableMapOf(
             "language" to "pt-BR",
@@ -82,12 +88,33 @@ object TmdbClient {
             "page" to "1"
         )
         if (genreId != null) base["with_genres"] = genreId.toString()
-        if (!year.isNullOrBlank()) base[if (type == "tv") "first_air_date_year" else "primary_release_year"] = year
+        if (!year.isNullOrBlank()) {
+            val bounds = yearPeriodBounds(year)
+            if (bounds != null) {
+                if (type == "tv") { base["first_air_date.gte"] = bounds.first; base["first_air_date.lte"] = bounds.second }
+                else { base["primary_release_date.gte"] = bounds.first; base["primary_release_date.lte"] = bounds.second }
+            } else base[if (type == "tv") "first_air_date_year" else "primary_release_year"] = year
+        }
+        if (originalLanguages.isNotEmpty()) base["with_original_language"] = originalLanguages.joinToString("|")
         val firstPage = requestObject(endpoint, credential, base)
         val totalPages = firstPage.optInt("total_pages", 1).coerceIn(1, 500)
         val randomPage = (1..totalPages).random()
         base["page"] = randomPage.toString()
         return request(endpoint, credential, base).filter { it.posterPath != null }
+    }
+
+    suspend fun cast(id: Int, type: String, credential: String): List<TmdbCastMember> {
+        val endpoint = if (type == "tv") "tv" else "movie"
+        val cast = requestObject("/$endpoint/$id/credits", credential, mapOf("language" to "pt-BR")).optJSONArray("cast") ?: return emptyList()
+        return buildList {
+            for (i in 0 until cast.length()) {
+                val person = cast.optJSONObject(i) ?: continue
+                val name = person.optString("name").trim()
+                if (name.isBlank()) continue
+                add(TmdbCastMember(person.optInt("id"), name, person.optString("character"), person.optString("profile_path").takeIf { it.startsWith("/") }))
+                if (size >= 10) break
+            }
+        }
     }
 
     suspend fun trailer(id: Int, type: String, credential: String): TmdbTrailer? {
@@ -163,6 +190,16 @@ object TmdbClient {
                     .put("status", if (number == 0) "SPECIAL" else "WATCHLIST"))
             }
         }.toString()
+    }
+
+    private fun yearPeriodBounds(period: String): Pair<String, String>? = when (period) {
+        "2020–atual" -> "2020-01-01" to "${java.time.Year.now().value}-12-31"
+        "2010–2019" -> "2010-01-01" to "2019-12-31"
+        "2000–2009" -> "2000-01-01" to "2009-12-31"
+        "1990–1999" -> "1990-01-01" to "1999-12-31"
+        "1980–1989" -> "1980-01-01" to "1989-12-31"
+        "Antes de 1980" -> "1900-01-01" to "1979-12-31"
+        else -> null
     }
 
     private suspend fun requestObject(path: String, credential: String, parameters: Map<String, String>): JSONObject =

@@ -265,6 +265,10 @@ class MainActivity : ComponentActivity() {
             var filter by remember { mutableStateOf("Quero assistir") }
             var categoryFilter by remember { mutableStateOf("FILMES") }
             var yearFilter by remember { mutableStateOf("Todos") }
+            var searchYearPeriod by remember { mutableStateOf("Todos") }
+            var exploreYearPeriod by remember { mutableStateOf("Todos") }
+            var detailCast by remember { mutableStateOf(emptyList<br.com.minhamidia.data.TmdbCastMember>()) }
+            var detailCastLoading by remember { mutableStateOf(false) }
             var sortMode by remember { mutableStateOf("Manual") }
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
@@ -310,6 +314,14 @@ class MainActivity : ComponentActivity() {
             val rouletteWheelRotation = remember { Animatable(0f) }
             val rouletteScope = rememberCoroutineScope()
             var editingSeries by remember { mutableStateOf<MediaItem?>(null) }
+            LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
+                val selected = detailItem
+                if (page == "Detalhes" && selected != null && apiKey.isNotBlank()) {
+                    detailCast = emptyList(); detailCastLoading = true
+                    detailCast = runCatching { TmdbClient.cast(selected.id, selected.type, apiKey).take(10) }.getOrDefault(emptyList())
+                    detailCastLoading = false
+                } else { detailCast = emptyList(); detailCastLoading = false }
+            }
             LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
                 val selected = detailItem
                 if (page == "Detalhes" && selected != null && apiKey.isNotBlank()) {
@@ -456,15 +468,15 @@ class MainActivity : ComponentActivity() {
                     } else {
                         exploreLoading = true
                         exploreError = ""
-                        runCatching { TmdbClient.search(exploreQuery.trim(), apiKey).filter { it.type == exploreType && it.posterPath != null } }
+                        runCatching { TmdbClient.search(exploreQuery.trim(), apiKey).filter { it.type == exploreType && it.posterPath != null && yearMatches(it.year, exploreYearPeriod) } }
                             .onSuccess { items -> exploreResults = items; exploreCanLoadMore = false; explorePage = 1; exploreSearchLoadedKey = searchKey }
                             .onFailure { exploreError = it.message ?: "Não foi possível pesquisar os títulos." }
                         exploreLoading = false
                     }
                 }
             }
-            LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, apiKey, exploreQuery) {
-                val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$apiKey|${exploreQuery.trim()}"
+            LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, exploreYearPeriod, apiKey, exploreQuery) {
+                val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$exploreYearPeriod|$apiKey|${exploreQuery.trim()}"
                 if (page == "Explorar" && exploreQuery.isBlank() && exploreCatalogLoadedKey != catalogKey) {
                     explorePage = 1
                     exploreResults = emptyList()
@@ -474,7 +486,7 @@ class MainActivity : ComponentActivity() {
                     else {
                         exploreLoading = true
                         val genreId = if (exploreGenre == "Todos") null else exploreGenres(exploreType).firstOrNull { it.first == exploreGenre }?.second
-                        runCatching { TmdbClient.catalog(exploreType, exploreCategory, 1, genreId, apiKey).filter { it.posterPath != null } }
+                        runCatching { TmdbClient.catalog(exploreType, exploreCategory, 1, genreId, apiKey, exploreYearPeriod).filter { it.posterPath != null } }
                             .onSuccess { items -> exploreResults = items; exploreCanLoadMore = items.size >= 20; exploreCatalogLoadedKey = catalogKey }
                             .onFailure { exploreError = it.message ?: "Não foi possível carregar o catálogo." }
                         exploreLoading = false
@@ -583,6 +595,13 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     var exploreGenreMenu by remember { mutableStateOf(false) }
+                                    var exploreYearMenu by remember { mutableStateOf(false) }
+                                    Box(Modifier.fillMaxWidth()) {
+                                        OutlinedButton(onClick = { exploreYearMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Período: $exploreYearPeriod  ▾") }
+                                        DropdownMenu(expanded = exploreYearMenu, onDismissRequest = { exploreYearMenu = false }) {
+                                            listOf("Todos", "2020–atual", "2010–2019", "2000–2009", "1990–1999", "1980–1989", "Antes de 1980").forEach { period -> DropdownMenuItem(text = { Text(period) }, onClick = { exploreYearPeriod = period; exploreYearMenu = false; exploreCatalogLoadedKey = ""; exploreSearchLoadedKey = "" }) }
+                                        }
+                                    }
                                     Box {
                                         OutlinedButton(onClick = { exploreGenreMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Gênero: $exploreGenre  ▾") }
                                         DropdownMenu(expanded = exploreGenreMenu, onDismissRequest = { exploreGenreMenu = false }) {
@@ -618,7 +637,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             if (exploreCanLoadMore) item {
-                                                OutlinedButton(onClick = { if (!exploreLoading) lifecycleScope.launch { exploreLoading = true; val nextPage = explorePage + 1; val genreId = if (exploreGenre == "Todos") null else exploreGenres(exploreType).firstOrNull { it.first == exploreGenre }?.second; runCatching { TmdbClient.catalog(exploreType, exploreCategory, nextPage, genreId, apiKey).filter { it.posterPath != null } }.onSuccess { items -> val newItems = items.filter { candidate -> exploreResults.none { it.id == candidate.id && it.type == candidate.type } }; exploreResults = exploreResults + newItems; explorePage = nextPage; exploreCanLoadMore = items.size >= 20 }.onFailure { exploreError = it.message ?: "Falha ao carregar mais títulos." }; exploreLoading = false } }, modifier = Modifier.fillMaxWidth(), enabled = !exploreLoading) { if (exploreLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Carregar mais títulos") }
+                                                OutlinedButton(onClick = { if (!exploreLoading) lifecycleScope.launch { exploreLoading = true; val nextPage = explorePage + 1; val genreId = if (exploreGenre == "Todos") null else exploreGenres(exploreType).firstOrNull { it.first == exploreGenre }?.second; runCatching { TmdbClient.catalog(exploreType, exploreCategory, nextPage, genreId, apiKey, exploreYearPeriod).filter { it.posterPath != null } }.onSuccess { items -> val filteredItems = items.filter { yearMatches(it.year, exploreYearPeriod) }; val newItems = filteredItems.filter { candidate -> exploreResults.none { it.id == candidate.id && it.type == candidate.type } }; exploreResults = exploreResults + newItems; explorePage = nextPage; exploreCanLoadMore = items.size >= 20 }.onFailure { exploreError = it.message ?: "Falha ao carregar mais títulos." }; exploreLoading = false } }, modifier = Modifier.fillMaxWidth(), enabled = !exploreLoading) { if (exploreLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Carregar mais títulos") }
                                             }
                                             if (exploreError.isNotBlank()) item { Text(exploreError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
                                         }
@@ -627,6 +646,14 @@ class MainActivity : ComponentActivity() {
                             }
                             "Buscar" -> {
                                 OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Nome do filme ou série") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true, shape = RoundedCornerShape(15.dp))
+                                Spacer(Modifier.height(8.dp))
+                                var searchPeriodMenu by remember { mutableStateOf(false) }
+                                Box(Modifier.fillMaxWidth()) {
+                                    OutlinedButton(onClick = { searchPeriodMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Período: $searchYearPeriod  ▾") }
+                                    DropdownMenu(expanded = searchPeriodMenu, onDismissRequest = { searchPeriodMenu = false }) {
+                                        listOf("Todos", "2020–atual", "2010–2019", "2000–2009", "1990–1999", "1980–1989", "Antes de 1980").forEach { period -> DropdownMenuItem(text = { Text(period) }, onClick = { searchYearPeriod = period; searchPeriodMenu = false }) }
+                                    }
+                                }
                                 Spacer(Modifier.height(8.dp))
                                 Button(onClick = {
                                     if (apiKey.isBlank()) showKey = true
@@ -641,7 +668,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Text(message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                                    items(results, key = { "${it.type}-${it.id}" }) { item ->
+                                    items(results.filter { yearMatches(it.year, searchYearPeriod) }, key = { "${it.type}-${it.id}" }) { item ->
                                         val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
                                         SearchCard(item, onOpen = {
                                             detailItem = item
@@ -674,6 +701,21 @@ class MainActivity : ComponentActivity() {
                                                     Text(tmdbRatingLabel(selectedTitle.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                                     Spacer(Modifier.height(8.dp))
                                                     Text(selectedTitle.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
+                                                }
+                                            }
+                                            Spacer(Modifier.height(12.dp))
+                                            Text("ELENCO PRINCIPAL", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            when {
+                                                detailCastLoading -> CircularProgressIndicator(color = Purple, modifier = Modifier.size(22.dp))
+                                                detailCast.isEmpty() -> Text("Elenco indisponível para este título.", color = Muted, fontSize = 12.sp)
+                                                else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                    items(detailCast, key = { it.id }) { member ->
+                                                        Column(Modifier.width(104.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                            AsyncImage(model = member.profilePath?.let { "https://image.tmdb.org/t/p/w185$it" }, contentDescription = member.name, modifier = Modifier.fillMaxWidth().height(132.dp).background(Panel, RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                                                            Text(member.name, color = TextMain, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                                                            Text(member.character.ifBlank { "Personagem não informado" }, color = Muted, fontSize = 10.sp, maxLines = 2)
+                                                        }
+                                                    }
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
@@ -1271,13 +1313,11 @@ class MainActivity : ComponentActivity() {
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Box(Modifier.weight(1f)) {
                                         Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(16.dp)) {
-                                            Text("NA COLEÇÃO", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                            Text(all.count { it.status != "WATCHED" }.toString(), color = Purple, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                                            Text("${all.count { it.mediaType == "movie" && it.status != "WATCHED" }} filmes", color = Muted, fontSize = 11.sp)
-                                            Text("${all.count { it.mediaType == "tv" && it.status != "WATCHED" }} séries", color = Muted, fontSize = 11.sp)
+                                            Text("NOVIDADES PARA DESCOBRIR", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                            Text("Catálogo atualizado", color = Purple, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                                            Text("Filmes e séries selecionados pelo que está em alta.", color = Muted, fontSize = 11.sp)
                                         }
                                     }
-                                    Box(Modifier.weight(1f)) { StatCard("Assistindo", all.count { it.mediaType == "tv" && it.status == "WATCHING" }.toString(), "Séries em andamento") }
                                 }
                                 Spacer(Modifier.height(14.dp))
                                 Text("EM ALTA • FILMES", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1371,7 +1411,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 if (showRouletteDialog) {
-                    val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null && (rouletteYear == "Todos" || it.year == rouletteYear) }
+                    val collectionOptions = all.filter { it.mediaType == rouletteType && it.status != "WATCHED" && it.tmdbId != null && yearMatches(it.year, rouletteYear) }
                         .map { media -> TmdbResult(media.tmdbId!!, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage) }
                     val options = if (rouletteMode == "LIST") collectionOptions else emptyList()
                     val genreOptions = if (rouletteType == "movie") listOf(
@@ -1397,7 +1437,7 @@ class MainActivity : ComponentActivity() {
                                 val pool: List<TmdbResult> = if (rouletteMode == "LIST") options else {
                                     TmdbClient.discoverRandom(
                                         rouletteType, selectedGenreId,
-                                        rouletteYear.takeIf { it != "Todos" }, apiKey
+                                        rouletteYear.takeIf { it != "Todos" }, apiKey, originalLanguages = listOf("en", "es")
                                     ).filter { candidate ->
                                         all.none { it.mediaType == candidate.type && it.tmdbId == candidate.id }
                                     }
@@ -1450,8 +1490,7 @@ class MainActivity : ComponentActivity() {
                                         Box(Modifier.weight(1f)) {
                                             OutlinedButton(onClick = { rouletteYearMenu = true }, modifier = Modifier.fillMaxWidth(), enabled = !rouletteSpinning) { Text("Ano: $rouletteYear") }
                                             DropdownMenu(expanded = rouletteYearMenu, onDismissRequest = { rouletteYearMenu = false }) {
-                                                val yearValues = if (rouletteMode == "LIST") all.filter { it.mediaType == rouletteType }.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending().map { it.toString() } else (java.time.Year.now().value downTo 1950).map { it.toString() }
-                                                (listOf("Todos") + yearValues).forEach { year -> DropdownMenuItem(text = { Text(year) }, onClick = { rouletteYear = year; rouletteSuggestion = null; rouletteYearMenu = false }) }
+                                                listOf("Todos", "2020–atual", "2010–2019", "2000–2009", "1990–1999", "1980–1989", "Antes de 1980").forEach { period -> DropdownMenuItem(text = { Text(period) }, onClick = { rouletteYear = period; rouletteSuggestion = null; rouletteYearMenu = false }) }
                                             }
                                         }
                                     }
@@ -1603,6 +1642,20 @@ class MainActivity : ComponentActivity() {
 }
 
 
+private fun yearMatches(year: String, period: String): Boolean {
+    val value = year.toIntOrNull() ?: return period == "Todos"
+    val current = java.time.Year.now().value
+    return when (period) {
+        "2020–atual" -> value in 2020..current
+        "2010–2019" -> value in 2010..2019
+        "2000–2009" -> value in 2000..2009
+        "1990–1999" -> value in 1990..1999
+        "1980–1989" -> value in 1980..1989
+        "Antes de 1980" -> value < 1980
+        else -> true
+    }
+}
+
 private fun compareVersions(first: String, second: String): Int {
     val a = first.split(".").map { it.toIntOrNull() ?: 0 }
     val b = second.split(".").map { it.toIntOrNull() ?: 0 }
@@ -1748,35 +1801,3 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val statusLabel = when {
-                media.mediaType == "movie" && media.status == "WATCHING" -> "QUERO ASSISTIR"
-                media.status == "WATCHLIST" -> "QUERO ASSISTIR"
-                media.mediaType == "tv" && media.status == "WATCHING" -> "TÔ ASSISTINDO"
-                media.status == "WATCHED" -> "JÁ ASSISTI"
-                else -> "NA COLEÇÃO"
-            }
-            Text(statusLabel, color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-                modifier = Modifier.background(Night, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 6.dp))
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Excluir", color = Muted, fontSize = 11.sp) }
-        }
-        if (showStatusActions) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = { onStatus("WATCHLIST") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Quero assistir", fontSize = 10.sp) }
-                if (media.mediaType == "tv") {
-                    Button(onClick = { onStatus("WATCHING") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Tô assistindo", fontSize = 10.sp) }
-                }
-                Button(onClick = { onStatus("WATCHED") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Já assisti", fontSize = 10.sp) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatCard(title: String, value: String, detail: String) {
-    Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(16.dp)) {
-        Text(title.uppercase(), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-        Text(value, color = Purple, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-        Text(detail, color = Muted, fontSize = 11.sp)
-    }
-}
