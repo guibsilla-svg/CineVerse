@@ -34,6 +34,8 @@ data class TmdbResult(
 data class TmdbTrailer(val key: String, val name: String, val language: String)
 data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
+data class TmdbShareCardDetails(val leadActor: String, val genres: List<String>, val backdropPath: String?)
+
 object TmdbClient {
     suspend fun search(query: String, credential: String): List<TmdbResult> =
         request("/search/multi", credential, mapOf(
@@ -136,6 +138,28 @@ object TmdbClient {
             else -> discoveries
         }
         return selectedBand.random()
+    }
+
+    suspend fun shareCardDetails(id: Int, type: String, credential: String): TmdbShareCardDetails {
+        val endpoint = if (type == "tv") "tv" else "movie"
+        val details = requestObject("/$endpoint/$id", credential, mapOf("language" to "pt-BR"))
+        val genresJson = details.optJSONArray("genres")
+        val genres = buildList {
+            if (genresJson != null) for (i in 0 until genresJson.length()) {
+                val name = genresJson.optJSONObject(i)?.optString("name").orEmpty()
+                if (name.isNotBlank()) add(name)
+            }
+        }
+        val credits = requestObject("/$endpoint/$id/credits", credential, mapOf("language" to "pt-BR"))
+        val leadActor = credits.optJSONArray("cast")?.optJSONObject(0)?.optString("name").orEmpty()
+        val images = requestObject("/$endpoint/$id/images", credential, mapOf("include_image_language" to "pt,null,en"))
+        val backdrops = images.optJSONArray("backdrops")
+        val backdropPath = backdrops?.let { array ->
+            (0 until array.length()).asSequence()
+                .mapNotNull { array.optJSONObject(it)?.optString("file_path") }
+                .firstOrNull { it.startsWith("/") }
+        }
+        return TmdbShareCardDetails(leadActor, genres, backdropPath)
     }
 
     suspend fun cast(id: Int, type: String, credential: String): List<TmdbCastMember> {
