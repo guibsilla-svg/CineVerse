@@ -279,6 +279,8 @@ class MainActivity : ComponentActivity() {
             var recommendationsError by remember { mutableStateOf("") }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var showKey by remember { mutableStateOf(false) }
+            var updateChecking by remember { mutableStateOf(false) }
+            var updateMessage by remember { mutableStateOf("") }
             var busy by remember { mutableStateOf(false) }
             var roulettePick by remember { mutableStateOf<MediaItem?>(null) }
             var showRouletteDialog by remember { mutableStateOf(false) }
@@ -1113,6 +1115,75 @@ class MainActivity : ComponentActivity() {
                                         Text(option, color = TextMain, fontSize = 13.sp)
                                     }
                                 }
+                                Divider(color = Muted.copy(alpha = .25f))
+                                Text("ATUALIZAÇÕES DO CINEVERSO", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Confira se existe uma nova versão do aplicativo. Suas listas e seus dados permanecem salvos durante a atualização.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
+                                Button(
+                                    onClick = {
+                                        if (!updateChecking) {
+                                            updateChecking = true
+                                            updateMessage = "Verificando a versão mais recente..."
+                                            lifecycleScope.launch {
+                                                val result = withContext(Dispatchers.IO) {
+                                                    runCatching {
+                                                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases?per_page=100").openConnection() as HttpURLConnection).apply {
+                                                            connectTimeout = 15000
+                                                            readTimeout = 15000
+                                                            setRequestProperty("Accept", "application/vnd.github+json")
+                                                            setRequestProperty("User-Agent", "CineVerso-Android")
+                                                        }
+                                                        try {
+                                                            val releases = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+                                                            val latest = (0 until releases.length())
+                                                                .map { releases.getJSONObject(it) }
+                                                                .filter {
+                                                                    it.optString("tag_name").removePrefix("v").startsWith("1.0.") &&
+                                                                        !it.optBoolean("draft") && !it.optBoolean("prerelease")
+                                                                }
+                                                                .maxByOrNull { it.optString("tag_name").removePrefix("v") }
+                                                            val tag = latest?.optString("tag_name")?.removePrefix("v").orEmpty()
+                                                            val assets = latest?.optJSONArray("assets")
+                                                            val apk = assets?.let { array ->
+                                                                (0 until array.length()).map { array.getJSONObject(it) }
+                                                                    .firstOrNull { it.optString("name") == "cineverse.apk" }
+                                                                    ?.optString("browser_download_url")
+                                                            }
+                                                            if (tag.isBlank() || apk?.startsWith("https://") != true) {
+                                                                throw IllegalStateException("Não foi possível localizar o APK da versão estável.")
+                                                            }
+                                                            if (compareVersions(tag, BuildConfig.VERSION_NAME) > 0) tag to apk else null
+                                                        } finally {
+                                                            connection.disconnect()
+                                                        }
+                                                    }
+                                                }
+                                                result.fold(
+                                                    onSuccess = { release ->
+                                                        if (release == null) {
+                                                            updateMessage = "Seu CineVerso já está atualizado (versão ${BuildConfig.VERSION_NAME})."
+                                                        } else {
+                                                            updateMessage = "Versão ${release.first} disponível. Iniciando o download..."
+                                                            downloadAndInstallUpdate(release.second, release.first)
+                                                        }
+                                                    },
+                                                    onFailure = {
+                                                        updateMessage = "Não foi possível verificar agora. Confira sua conexão e tente novamente."
+                                                    }
+                                                )
+                                                updateChecking = false
+                                            }
+                                        }
+                                    },
+                                    enabled = !updateChecking,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (updateChecking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    else Text("Verificar atualizações")
+                                }
+                                if (updateMessage.isNotBlank()) {
+                                    Text(updateMessage, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
+                                }
+                                Spacer(Modifier.height(8.dp))
                                 Text("ACESSO OFFLINE", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("Sua coleção, avaliações, favoritos e progresso ficam salvos localmente. Esses dados continuam disponíveis sem internet; novas buscas, pôsteres não armazenados e atualizações do catálogo exigem conexão.", color = Muted, fontSize = 12.sp)
                                 Divider(color = Muted.copy(alpha = .25f))
