@@ -413,16 +413,16 @@ class MainActivity : ComponentActivity() {
 
                         val tasteProfile = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
                         fun personalized(items: List<TmdbResult>, mediaType: String): List<TmdbResult> {
-                            if (homeOrder == "Descobertas primeiro" || tasteProfile.isEmpty()) return items.take(12)
+                            if (homeOrder == "Descobertas primeiro" || tasteProfile.isEmpty()) return items.take(20)
                             val profile = tasteProfile.filter { it.mediaType == mediaType }
-                            if (profile.isEmpty()) return items.take(12)
+                            if (profile.isEmpty()) return items.take(20)
                             val tokens = profile.flatMap { (it.title + " " + it.overview + " " + it.genres).lowercase().split(Regex("[^\\p{L}\\p{N}]+")) }
                                 .filter { it.length >= 4 }.groupingBy { it }.eachCount()
                             return items.sortedByDescending { candidate ->
                                 val text = (candidate.title + " " + candidate.overview).lowercase()
                                 tokens.entries.sumOf { (word, weight) -> if (text.contains(word)) weight * 2 else 0 } +
                                     if (profile.any { it.title.equals(candidate.title, ignoreCase = true) }) -100 else 0
-                            }.take(12)
+                            }.take(20)
                         }
                         recommendedMovies = personalized(movieResult.getOrDefault(emptyList()), "movie")
                         recommendedShows = personalized(showResult.getOrDefault(emptyList()), "tv")
@@ -1801,3 +1801,35 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val statusLabel = when {
+                media.mediaType == "movie" && media.status == "WATCHING" -> "QUERO ASSISTIR"
+                media.status == "WATCHLIST" -> "QUERO ASSISTIR"
+                media.mediaType == "tv" && media.status == "WATCHING" -> "TÔ ASSISTINDO"
+                media.status == "WATCHED" -> "JÁ ASSISTI"
+                else -> "NA COLEÇÃO"
+            }
+            Text(statusLabel, color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
+                modifier = Modifier.background(Night, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 6.dp))
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Excluir", color = Muted, fontSize = 11.sp) }
+        }
+        if (showStatusActions) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onStatus("WATCHLIST") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Quero assistir", fontSize = 10.sp) }
+                if (media.mediaType == "tv") {
+                    Button(onClick = { onStatus("WATCHING") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Tô assistindo", fontSize = 10.sp) }
+                }
+                Button(onClick = { onStatus("WATCHED") }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 7.dp)) { Text("Já assisti", fontSize = 10.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatCard(title: String, value: String, detail: String) {
+    Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(16.dp)) {
+        Text(title.uppercase(), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(value, color = Purple, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+        Text(detail, color = Muted, fontSize = 11.sp)
+    }
+}
