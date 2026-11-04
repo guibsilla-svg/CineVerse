@@ -1450,7 +1450,7 @@ class MainActivity : ComponentActivity() {
                                 if (pool.isEmpty()) {
                                     rouletteError = "Não encontrei títulos com esse filtro. Tente outro gênero."
                                 } else {
-                                    rouletteSuggestion = pool.random()
+                                    rouletteSuggestion = if (rouletteMode == "LIST") pool.random() else TmdbClient.pickRouletteTitle(pool)
                                 }
                             } catch (error: Exception) {
                                 rouletteError = error.message ?: "Não foi possível consultar o catálogo. Confira sua conexão e a chave TMDB."

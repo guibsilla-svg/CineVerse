@@ -15,7 +15,9 @@ data class TmdbResult(
     val posterPath: String?,
     val overview: String,
     val releaseDate: String,
-    val tmdbVoteAverage: Double = 0.0
+    val tmdbVoteAverage: Double = 0.0,
+    val voteCount: Int = 0,
+    val popularity: Double = 0.0
 ) {
     fun toMediaItem() = MediaItem(
         tmdbId = id,
@@ -98,9 +100,42 @@ object TmdbClient {
         if (originalLanguages.isNotEmpty()) base["with_original_language"] = originalLanguages.joinToString("|")
         val firstPage = requestObject(endpoint, credential, base)
         val totalPages = firstPage.optInt("total_pages", 1).coerceIn(1, 500)
-        val randomPage = (1..totalPages).random()
-        base["page"] = randomPage.toString()
-        return request(endpoint, credential, base).filter { it.posterPath != null }
+        // Amostra páginas espalhadas pelo catálogo: mantém o universo amplo sem depender só da primeira página.
+        val sampledPages = (1..totalPages).shuffled().take(minOf(4, totalPages))
+        return sampledPages.flatMap { page ->
+            base["page"] = page.toString()
+            request(endpoint, credential, base)
+        }.filter { it.posterPath != null }.distinctBy { it.id }
+    }
+
+    fun pickRouletteTitle(pool: List<TmdbResult>): TmdbResult? {
+        if (pool.isEmpty()) return null
+        val highRelevance = mutableListOf<TmdbResult>()
+        val goodRelevance = mutableListOf<TmdbResult>()
+        val discoveries = mutableListOf<TmdbResult>()
+        pool.forEach { item ->
+            val votes = item.voteCount.coerceAtLeast(0)
+            val confidence = votes.toDouble() / (votes + 250.0)
+            val bayesianRating = confidence * item.tmdbVoteAverage + (1.0 - confidence) * 6.2
+            when {
+                (bayesianRating >= 7.0 && votes >= 150) || (bayesianRating >= 6.5 && item.popularity >= 25.0) ->
+                    highRelevance.add(item)
+                bayesianRating >= 6.0 || item.popularity >= 8.0 -> goodRelevance.add(item)
+                else -> discoveries.add(item)
+            }
+        }
+        // 70/20/10 orienta as chances; se uma faixa estiver vazia, as outras recebem a chance disponível.
+        val available = listOf(highRelevance, goodRelevance, discoveries).filter { it.isNotEmpty() }
+        val selectedBand = when {
+            highRelevance.isNotEmpty() && goodRelevance.isNotEmpty() && discoveries.isNotEmpty() ->
+                when ((0 until 100).random()) { in 0..69 -> highRelevance; in 70..89 -> goodRelevance; else -> discoveries }
+            highRelevance.isNotEmpty() && goodRelevance.isNotEmpty() ->
+                if ((0 until 100).random() < 78) highRelevance else goodRelevance
+            highRelevance.isNotEmpty() -> highRelevance
+            goodRelevance.isNotEmpty() -> goodRelevance
+            else -> discoveries
+        }
+        return selectedBand.random()
     }
 
     suspend fun cast(id: Int, type: String, credential: String): List<TmdbCastMember> {
@@ -279,7 +314,9 @@ object TmdbClient {
                         posterPath = item.optString("poster_path").takeIf { it.isNotBlank() && it != "null" },
                         overview = item.optString("overview"),
                         releaseDate = date,
-                        tmdbVoteAverage = item.optDouble("vote_average", 0.0)
+                        tmdbVoteAverage = item.optDouble("vote_average", 0.0),
+                        voteCount = item.optInt("vote_count", 0),
+                        popularity = item.optDouble("popularity", 0.0)
                     ))
                 }
             }
