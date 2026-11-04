@@ -1310,15 +1310,6 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                                 Spacer(Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Box(Modifier.weight(1f)) {
-                                        Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(16.dp)) {
-                                            Text("NOVIDADES PARA DESCOBRIR", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                            Text("Catálogo atualizado", color = Purple, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-                                            Text("Filmes e séries selecionados pelo que está em alta.", color = Muted, fontSize = 11.sp)
-                                        }
-                                    }
-                                }
                                 Spacer(Modifier.height(14.dp))
                                 Text("EM ALTA • FILMES", color = Purple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(8.dp))
