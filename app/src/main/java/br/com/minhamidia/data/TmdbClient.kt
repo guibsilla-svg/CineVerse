@@ -34,7 +34,7 @@ data class TmdbResult(
 data class TmdbTrailer(val key: String, val name: String, val language: String)
 data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
-data class TmdbShareCardDetails(val leadActor: String, val genres: List<String>, val backdropPath: String?)
+data class TmdbShareCardDetails(val leadActor: String, val genres: List<String>, val backdropPath: String?, val stillPaths: List<String>)
 
 object TmdbClient {
     suspend fun search(query: String, credential: String): List<TmdbResult> =
@@ -159,7 +159,14 @@ object TmdbClient {
                 .mapNotNull { array.optJSONObject(it)?.optString("file_path") }
                 .firstOrNull { it.startsWith("/") }
         }
-        return TmdbShareCardDetails(leadActor, genres, backdropPath)
+        val stillPaths = backdrops?.let { array ->
+            (0 until array.length()).asSequence()
+                .mapNotNull { array.optJSONObject(it)?.optString("file_path") }
+                .filter { it.startsWith("/") && it != backdropPath }
+                .take(3)
+                .toList()
+        }.orEmpty()
+        return TmdbShareCardDetails(leadActor, genres, backdropPath, stillPaths)
     }
 
     suspend fun cast(id: Int, type: String, credential: String): List<TmdbCastMember> {

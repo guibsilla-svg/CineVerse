@@ -23,104 +23,218 @@ private fun downloadShareImage(url: String): Bitmap? = runCatching {
     try { c.inputStream.use { BitmapFactory.decodeStream(it) } } finally { c.disconnect() }
 }.getOrNull()
 
-private fun wrapShareText(text: String, paint: Paint, maxWidth: Float, maxLines: Int): List<String> {
+private fun wrapShareText(text: String, paint: Paint, maxWidth: Float): List<String> {
     val lines = mutableListOf<String>()
     var line = ""
-    for (word in text.split(Regex("\\s+"))) {
+    text.split(Regex("\\s+")).forEach { word ->
         val candidate = if (line.isEmpty()) word else "${line} ${word}"
         if (paint.measureText(candidate) > maxWidth && line.isNotEmpty()) {
-            lines.add(line); line = word
-            if (lines.size == maxLines) break
+            lines.add(line)
+            line = word
         } else line = candidate
     }
-    if (lines.size < maxLines && line.isNotEmpty()) lines.add(line)
-    if (lines.size == maxLines && text.isNotBlank()) {
-        var last = lines.last()
-        while (paint.measureText("${last}…") > maxWidth && last.isNotEmpty()) last = last.dropLast(1)
-        lines[lines.lastIndex] = "${last}…"
-    }
+    if (line.isNotEmpty()) lines.add(line)
     return lines
 }
 
 private fun drawCrop(canvas: Canvas, image: Bitmap, target: RectF, paint: Paint) {
     val scale = max(target.width() / image.width, target.height() / image.height)
-    val w = image.width * scale; val h = image.height * scale
+    val w = image.width * scale
+    val h = image.height * scale
     canvas.drawBitmap(image, null, RectF(target.centerX()-w/2, target.centerY()-h/2,
         target.centerX()+w/2, target.centerY()+h/2), paint)
+}
+
+private fun drawClapper(canvas: Canvas, x: Float, y: Float, paint: Paint) {
+    paint.color = 0xFFE9DDF5.toInt()
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = 3.5f
+    canvas.drawRoundRect(RectF(x,y+8,x+30,y+29),3f,3f,paint)
+    canvas.drawLine(x+1,y+7,x+29,y+1,paint)
+    canvas.drawLine(x+8,y+5,x+12,y+12,paint)
+    canvas.drawLine(x+18,y+3,x+22,y+10,paint)
+    paint.style = Paint.Style.FILL
+}
+
+private fun drawStar(canvas: Canvas, x: Float, y: Float, paint: Paint) {
+    val path = Path()
+    for (i in 0 until 10) {
+        val angle = Math.toRadians(-90.0 + i * 36.0)
+        val radius = if (i % 2 == 0) 16f else 7f
+        val px = x + 16f + kotlin.math.cos(angle).toFloat() * radius
+        val py = y + 16f + kotlin.math.sin(angle).toFloat() * radius
+        if (i == 0) path.moveTo(px,py) else path.lineTo(px,py)
+    }
+    path.close()
+    paint.color = 0xFFFFC928.toInt()
+    canvas.drawPath(path,paint)
+}
+
+private fun drawCalendar(canvas: Canvas, x: Float, y: Float, paint: Paint) {
+    paint.color = 0xFFE9DDF5.toInt()
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = 3f
+    canvas.drawRoundRect(RectF(x,y+4,x+29,y+30),3f,3f,paint)
+    canvas.drawLine(x,y+12,x+29,y+12,paint)
+    canvas.drawLine(x+8,y,x+8,y+8,paint)
+    canvas.drawLine(x+21,y,x+21,y+8,paint)
+    paint.style = Paint.Style.FILL
 }
 
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
-        val bitmap = Bitmap.createBitmap(1080, 1080, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
-        p.shader = LinearGradient(0f,0f,1080f,1080f,
-            intArrayOf(0xFF08060E.toInt(),0xFF21102F.toInt(),0xFF090710.toInt()),null,Shader.TileMode.CLAMP)
-        canvas.drawRect(0f,0f,1080f,1080f,p); p.shader=null
-
         val artPath = info?.backdropPath ?: item.posterPath
-        val art = artPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280${it}") }
-        if (art != null) { drawCrop(canvas,art,RectF(0f,0f,1080f,690f),p); art.recycle() }
-        else { p.color=0xFF29183B.toInt(); canvas.drawRect(0f,0f,1080f,690f,p) }
-
-        p.shader=LinearGradient(0f,0f,0f,730f,
-            intArrayOf(0xB8080610.toInt(),0x00080610,0xFF090710.toInt()),null,Shader.TileMode.CLAMP)
-        canvas.drawRect(0f,0f,1080f,730f,p); p.shader=null
-        p.shader=LinearGradient(0f,430f,0f,760f,
-            intArrayOf(0x00090710,0xFF090710.toInt()),null,Shader.TileMode.CLAMP)
-        canvas.drawRect(0f,430f,1080f,760f,p); p.shader=null
-
-        val logo=BitmapFactory.decodeResource(context.resources,R.drawable.cineverse_logo_horizontal)
-        if (logo!=null) {
-            val scale=minOf(250f/logo.width,58f/logo.height); val w=logo.width*scale; val h=logo.height*scale
-            canvas.drawBitmap(logo,null,RectF(58f,42f,58f+w,42f+h),p); logo.recycle()
+        val hero = artPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280${it}") }
+        val stills = info?.stillPaths.orEmpty().take(3).mapNotNull {
+            downloadShareImage("https://image.tmdb.org/t/p/w780${it}")
         }
 
-        p.color=0xFFE2C8FF.toInt(); p.textSize=19f
-        p.typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText("RECOMENDAÇÃO EXCLUSIVA",60f,150f,p)
+        val width = 1080
+        val margin = 64f
+        val contentWidth = width - margin * 2
+        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        p.textSize = 28f
+        p.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        val synopsis = wrapShareText(
+            item.overview.ifBlank { "Uma história para entrar na sua lista." },
+            p, contentWidth
+        )
+        val synopsisLineHeight = 42f
+        val synopsisHeight = max(1, synopsis.size) * synopsisLineHeight
+        val heroHeight = 500f
+        val metadataY = heroHeight + 74f
+        val synopsisTitleY = metadataY + 105f
+        val synopsisStartY = synopsisTitleY + 58f
+        val stillTitleY = synopsisStartY + synopsisHeight + 54f
+        val stillTop = stillTitleY + 30f
+        val stillHeight = 190f
+        val buttonTop = stillTop + stillHeight + 54f
+        val height = (buttonTop + 130f).toInt()
 
-        p.color=Color.WHITE; p.textSize=76f
-        p.typeface=Typeface.create("sans-serif-condensed",Typeface.BOLD)
-        val titles=wrapShareText(item.title.uppercase(Locale("pt","BR")),p,960f,2)
-        var ty=if(titles.size==1) 515f else 455f
-        titles.forEach { canvas.drawText(it,60f,ty,p); ty+=82f }
+        val bitmap = Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        p.shader = LinearGradient(0f,0f,1080f,height.toFloat(),
+            intArrayOf(0xFF08060E.toInt(),0xFF21102F.toInt(),0xFF090710.toInt()),null,Shader.TileMode.CLAMP)
+        canvas.drawRect(0f,0f,width.toFloat(),height.toFloat(),p)
+        p.shader = null
 
-        p.color=0xFFE8DDF2.toInt(); p.textSize=25f
-        p.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-        val actor=info?.leadActor?.takeIf { it.isNotBlank() } ?: "Elenco em destaque"
-        canvas.drawText("COM ${actor}",64f,600f,p)
+        if (hero != null) {
+            drawCrop(canvas,hero,RectF(0f,0f,width.toFloat(),heroHeight),p)
+            hero.recycle()
+        } else {
+            p.color = 0xFF29183B.toInt()
+            canvas.drawRect(0f,0f,width.toFloat(),heroHeight,p)
+        }
+        p.shader = LinearGradient(0f,0f,0f,heroHeight,
+            intArrayOf(0xB8080610.toInt(),0x00080610,0xFF090710.toInt()),null,Shader.TileMode.CLAMP)
+        canvas.drawRect(0f,0f,width.toFloat(),heroHeight,p)
+        p.shader = null
 
-        val genres=info?.genres.orEmpty().take(2).joinToString("  /  ")
-        val metadata=buildList {
-            if(item.year.isNotBlank()) add(item.year)
-            if(genres.isNotBlank()) add(genres.uppercase(Locale("pt","BR")))
-            add(if(item.type.equals("tv",true)) "SÉRIE" else "FILME")
-            if(item.tmdbVoteAverage>0.0) add("★ %.1f".format(Locale.US,item.tmdbVoteAverage))
-        }.joinToString("     •     ")
-        p.color=0xFFB98AFF.toInt(); p.textSize=22f
-        p.typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText(metadata,64f,660f,p)
+        val logo = BitmapFactory.decodeResource(context.resources,R.drawable.cineverse_logo_horizontal)
+        if (logo != null) {
+            val scale = minOf(250f/logo.width,58f/logo.height)
+            val w = logo.width*scale
+            val h = logo.height*scale
+            canvas.drawBitmap(logo,null,RectF(58f,38f,58f+w,38f+h),p)
+            logo.recycle()
+        }
 
-        p.color=0xFF9B5CFF.toInt(); canvas.drawRoundRect(RectF(64f,720f,1016f,724f),2f,2f,p)
-        p.color=0xFFB98AFF.toInt(); p.textSize=19f
-        canvas.drawText("SOBRE A HISTÓRIA",64f,775f,p)
+        p.color = 0xFFE2C8FF.toInt()
+        p.textSize = 19f
+        p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
+        canvas.drawText("RECOMENDAÇÃO EXCLUSIVA",60f,145f,p)
 
-        p.color=0xFFF0EAF5.toInt(); p.textSize=27f
-        p.typeface=Typeface.create("sans-serif",Typeface.NORMAL)
-        val synopsis=wrapShareText(item.overview.ifBlank { "Uma história para entrar na sua lista." },p,950f,5)
-        var sy=825f
-        synopsis.forEach { canvas.drawText(it,64f,sy,p); sy+=38f }
+        p.color = Color.WHITE
+        p.textSize = 72f
+        p.typeface = Typeface.create("sans-serif-condensed",Typeface.BOLD)
+        val titleLines = wrapShareText(item.title.uppercase(Locale("pt","BR")),p,960f).take(2)
+        var titleY = if (titleLines.size == 1) 385f else 330f
+        titleLines.forEach { canvas.drawText(it,60f,titleY,p); titleY += 78f }
 
-        p.color=0xFF9B5CFF.toInt(); canvas.drawRoundRect(RectF(64f,1000f,1016f,1004f),2f,2f,p)
-        p.color=0xFFE8DDF2.toInt(); p.textSize=18f
-        p.typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText("CINEVERSO  •  MINHA INDICAÇÃO",64f,1045f,p)
+        // Informações em uma única linha: claquete | estrela | calendário.
+        val genre = info?.genres.orEmpty().take(2).joinToString(", ").ifBlank { "Gênero" }
+        val rating = if (item.tmdbVoteAverage > 0.0) String.format(Locale("pt","BR"),"%.1f",item.tmdbVoteAverage) else "—"
+        val year = item.year.ifBlank { "—" }
+        p.textSize = 25f
+        p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
+        var x = margin
+        val iconY = metadataY - 25f
+        drawClapper(canvas,x,iconY,p)
+        x += 42f
+        p.color = 0xFFF0EAF5.toInt()
+        canvas.drawText(genre,x,metadataY,p)
+        x += p.measureText(genre) + 28f
+        p.color = 0xFF9B5CFF.toInt()
+        canvas.drawText("|",x,metadataY,p)
+        x += 27f
+        drawStar(canvas,x,iconY,p)
+        x += 43f
+        p.color = 0xFFF0EAF5.toInt()
+        canvas.drawText(rating,x,metadataY,p)
+        x += p.measureText(rating) + 28f
+        p.color = 0xFF9B5CFF.toInt()
+        canvas.drawText("|",x,metadataY,p)
+        x += 27f
+        drawCalendar(canvas,x,iconY,p)
+        x += 42f
+        p.color = 0xFFF0EAF5.toInt()
+        canvas.drawText(year,x,metadataY,p)
 
-        val dir=File(context.cacheDir,"shared_recommendations").apply { mkdirs() }
-        val output=File(dir,"cineverso_${item.type}_${item.id}.png")
+        p.color = 0xFFB98AFF.toInt()
+        p.textSize = 21f
+        p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
+        canvas.drawText("SINOPSE",margin,synopsisTitleY,p)
+
+        p.color = 0xFFF0EAF5.toInt()
+        p.textSize = 28f
+        p.typeface = Typeface.create("sans-serif",Typeface.NORMAL)
+        var sy = synopsisStartY
+        synopsis.forEach { canvas.drawText(it,margin,sy,p); sy += synopsisLineHeight }
+
+        p.color = 0xFFB98AFF.toInt()
+        p.textSize = 21f
+        p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
+        canvas.drawText("CENAS DO FILME",margin,stillTitleY,p)
+
+        val gap = 16f
+        val cardWidth = (contentWidth-gap*2)/3f
+        for (i in 0 until 3) {
+            val left = margin + i*(cardWidth+gap)
+            val rect = RectF(left,stillTop,left+cardWidth,stillTop+stillHeight)
+            p.color = 0xFF2B1A3A.toInt()
+            canvas.drawRoundRect(rect,14f,14f,p)
+            val scene = stills.getOrNull(i)
+            if (scene != null) {
+                canvas.save()
+                val clip = Path().apply { addRoundRect(rect,14f,14f,Path.Direction.CW) }
+                canvas.clipPath(clip)
+                drawCrop(canvas,scene,rect,p)
+                canvas.restore()
+                scene.recycle()
+            } else {
+                p.color = 0xFF9B5CFF.toInt()
+                p.textSize = 17f
+                canvas.drawText("CINEVERSO",left+18f,stillTop+stillHeight/2,p)
+            }
+        }
+
+        p.color = 0xFF8A42F5.toInt()
+        canvas.drawRoundRect(RectF(margin,buttonTop,1080f-margin,buttonTop+82f),20f,20f,p)
+        p.color = Color.WHITE
+        p.textSize = 29f
+        p.typeface = Typeface.create("sans-serif",Typeface.BOLD)
+        val cta = "MINHA INDICAÇÃO"
+        val ctaWidth = p.measureText(cta)
+        canvas.drawText(cta,(width-ctaWidth)/2f,buttonTop+53f,p)
+
+        p.color = 0xFFE8DDF2.toInt()
+        p.textSize = 17f
+        p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
+        canvas.drawText("CINEVERSO",margin,buttonTop+112f,p)
+
+        val dir = File(context.cacheDir,"shared_recommendations").apply { mkdirs() }
+        val output = File(dir,"cineverso_${item.type}_${item.id}.png")
         FileOutputStream(output).use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
         bitmap.recycle()
         FileProvider.getUriForFile(context,"${context.packageName}.fileprovider",output)
