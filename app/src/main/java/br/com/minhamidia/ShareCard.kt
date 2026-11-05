@@ -7,6 +7,9 @@ import androidx.core.content.FileProvider
 import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -17,8 +20,8 @@ import kotlin.math.max
 
 private fun downloadShareImage(url: String): Bitmap? = runCatching {
     val c = URL(url).openConnection() as HttpURLConnection
-    c.connectTimeout = 12000
-    c.readTimeout = 12000
+    c.connectTimeout = 6000
+    c.readTimeout = 8000
     c.instanceFollowRedirects = true
     try { c.inputStream.use { BitmapFactory.decodeStream(it) } } finally { c.disconnect() }
 }.getOrNull()
@@ -70,9 +73,13 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
         val heroPath = info?.backdropPath ?: item.posterPath
-        val hero = heroPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280$it") }
-        val stills = info?.stillPaths.orEmpty().take(3).mapNotNull {
-            downloadShareImage("https://image.tmdb.org/t/p/w780$it")
+        val imagePaths = info?.stillPaths.orEmpty().take(3)
+        val (hero, stills) = coroutineScope {
+            val heroTask = async { heroPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280$it") } }
+            val stillTasks = imagePaths.map { path ->
+                async { downloadShareImage("https://image.tmdb.org/t/p/w780$path") }
+            }
+            heroTask.await() to stillTasks.awaitAll().filterNotNull()
         }
 
         val width = 1080

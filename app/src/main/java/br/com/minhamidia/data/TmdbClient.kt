@@ -1,6 +1,8 @@
 package br.com.minhamidia.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -142,7 +144,12 @@ object TmdbClient {
 
     suspend fun shareCardDetails(id: Int, type: String, credential: String): TmdbShareCardDetails {
         val endpoint = if (type == "tv") "tv" else "movie"
-        val details = requestObject("/$endpoint/$id", credential, mapOf("language" to "pt-BR"))
+        val (details, credits, images) = coroutineScope {
+            val detailsTask = async { requestObject("/$endpoint/$id", credential, mapOf("language" to "pt-BR")) }
+            val creditsTask = async { requestObject("/$endpoint/$id/credits", credential, mapOf("language" to "pt-BR")) }
+            val imagesTask = async { requestObject("/$endpoint/$id/images", credential, mapOf("include_image_language" to "pt,null,en")) }
+            Triple(detailsTask.await(), creditsTask.await(), imagesTask.await())
+        }
         val genresJson = details.optJSONArray("genres")
         val genres = buildList {
             if (genresJson != null) for (i in 0 until genresJson.length()) {
@@ -150,9 +157,7 @@ object TmdbClient {
                 if (name.isNotBlank()) add(name)
             }
         }
-        val credits = requestObject("/$endpoint/$id/credits", credential, mapOf("language" to "pt-BR"))
         val leadActor = credits.optJSONArray("cast")?.optJSONObject(0)?.optString("name").orEmpty()
-        val images = requestObject("/$endpoint/$id/images", credential, mapOf("include_image_language" to "pt,null,en"))
         val backdrops = images.optJSONArray("backdrops")
         val backdropPath = backdrops?.let { array ->
             (0 until array.length()).asSequence()

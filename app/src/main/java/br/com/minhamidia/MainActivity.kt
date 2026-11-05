@@ -282,6 +282,7 @@ class MainActivity : ComponentActivity() {
             var recommendationsLoading by remember { mutableStateOf(false) }
             var recommendationsError by remember { mutableStateOf("") }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
+            var sharingRecommendation by remember { mutableStateOf(false) }
             var showKey by remember { mutableStateOf(false) }
             var updateChecking by remember { mutableStateOf(false) }
             var updateMessage by remember { mutableStateOf("") }
@@ -721,25 +722,38 @@ class MainActivity : ComponentActivity() {
                                             Spacer(Modifier.height(12.dp))
                                             OutlinedButton(
                                                 onClick = {
-                                                    lifecycleScope.launch {
-                                                        runCatching {
-                                                            val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
-                                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                                type = "image/png"
-                                                                putExtra(Intent.EXTRA_STREAM, imageUri)
-                                                                clipData = android.content.ClipData.newUri(contentResolver, "Card CineVerso", imageUri)
-                                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    if (!sharingRecommendation) {
+                                                        sharingRecommendation = true
+                                                        Toast.makeText(this@MainActivity, "Preparando seu card…", Toast.LENGTH_SHORT).show()
+                                                        lifecycleScope.launch {
+                                                            try {
+                                                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
+                                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                                    type = "image/png"
+                                                                    putExtra(Intent.EXTRA_STREAM, imageUri)
+                                                                    clipData = android.content.ClipData.newUri(contentResolver, "Card CineVerso", imageUri)
+                                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                                }
+                                                                startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
+                                                            } catch (error: Exception) {
+                                                                Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
+                                                            } finally {
+                                                                sharingRecommendation = false
                                                             }
-                                                            startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
-                                                        }.onFailure {
-                                                            message = "Não foi possível gerar o card. Verifique sua conexão e tente novamente."
                                                         }
                                                     }
                                                 },
                                                 modifier = Modifier.fillMaxWidth(),
+                                                enabled = !sharingRecommendation,
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC29AFF))
                                             ) {
-                                                Text("COMPARTILHAR RECOMENDAÇÃO", fontWeight = FontWeight.Bold)
+                                                if (sharingRecommendation) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFC29AFF))
+                                                        Spacer(Modifier.width(10.dp))
+                                                        Text("GERANDO CARD…", fontWeight = FontWeight.Bold)
+                                                    }
+                                                } else Text("COMPARTILHAR RECOMENDAÇÃO", fontWeight = FontWeight.Bold)
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
