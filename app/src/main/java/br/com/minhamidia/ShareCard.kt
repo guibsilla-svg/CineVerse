@@ -211,9 +211,40 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val footer = "CINEVERSO  •  SUA PRÓXIMA HISTÓRIA COMEÇA AQUI"
         canvas.drawText(footer, (width-paint.measureText(footer))/2f, footerTop+125f, paint)
 
-        val dir = File(context.cacheDir, "shared_recommendations").apply { mkdirs() }
-        val output = File(dir, "cineverso_\${item.type}_\${item.id}.png")
-        FileOutputStream(output).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
-        FileProvider.getUriForFile(context, "\${context.packageName}.fileprovider", output)
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "cineverso_${item.type}_${item.id}.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CineVerso")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val imageUri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+        ) ?: run {
+            bitmap.recycle()
+            throw IllegalStateException("Não foi possível criar a imagem para compartilhamento")
+        }
+
+        try {
+            val stream = context.contentResolver.openOutputStream(imageUri)
+                ?: throw IllegalStateException("Não foi possível abrir a imagem gerada")
+            stream.use {
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) {
+                    throw IllegalStateException("Não foi possível salvar a imagem gerada")
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val ready = ContentValues().apply {
+                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                }
+                context.contentResolver.update(imageUri, ready, null, null)
+            }
+            bitmap.recycle()
+            imageUri
+        } catch (error: Exception) {
+            context.contentResolver.delete(imageUri, null, null)
+            bitmap.recycle()
+            throw error
+        }
     }
