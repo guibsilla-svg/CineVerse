@@ -3,7 +3,9 @@ package br.com.minhamidia
 import android.content.Context
 import android.graphics.*
 import android.net.Uri
-import androidx.core.content.FileProvider
+import android.content.ContentValues
+import android.provider.MediaStore
+import android.os.Build
 import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import kotlinx.coroutines.Dispatchers
