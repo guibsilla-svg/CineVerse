@@ -136,21 +136,22 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             val scale = minOf(250f/logo.width,58f/logo.height)
             val w = logo.width*scale
             val h = logo.height*scale
-            canvas.drawBitmap(logo,null,RectF(58f,38f,58f+w,38f+h),p)
+            canvas.drawBitmap(logo,null,RectF((width-w)/2f,38f,(width+w)/2f,38f+h),p)
             logo.recycle()
         }
 
         p.color = 0xFFE2C8FF.toInt()
         p.textSize = 19f
         p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText("RECOMENDAÇÃO EXCLUSIVA",60f,145f,p)
+        val eyebrow = "RECOMENDAÇÃO EXCLUSIVA"
+        canvas.drawText(eyebrow,(width-p.measureText(eyebrow))/2f,145f,p)
 
         p.color = Color.WHITE
         p.textSize = 72f
         p.typeface = Typeface.create("sans-serif-condensed",Typeface.BOLD)
         val titleLines = wrapShareText(item.title.uppercase(Locale("pt","BR")),p,960f).take(2)
         var titleY = if (titleLines.size == 1) 385f else 330f
-        titleLines.forEach { canvas.drawText(it,60f,titleY,p); titleY += 78f }
+        titleLines.forEach { canvas.drawText(it,(width-p.measureText(it))/2f,titleY,p); titleY += 78f }
 
         // Informações em uma única linha: claquete | estrela | calendário.
         val genre = info?.genres.orEmpty().take(2).joinToString(", ").ifBlank { "Gênero" }
@@ -158,13 +159,19 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val year = item.year.ifBlank { "—" }
         p.textSize = 25f
         p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
-        var x = margin
         val iconY = metadataY - 25f
+        val genreWidth = p.measureText(genre)
+        val ratingWidth = p.measureText(rating)
+        val yearWidth = p.measureText(year)
+        val separatorWidth = p.measureText("|")
+        val metadataWidth = 42f + genreWidth + 28f + separatorWidth + 27f +
+            43f + ratingWidth + 28f + separatorWidth + 27f + 42f + yearWidth
+        var x = (width - metadataWidth) / 2f
         drawClapper(canvas,x,iconY,p)
         x += 42f
         p.color = 0xFFF0EAF5.toInt()
         canvas.drawText(genre,x,metadataY,p)
-        x += p.measureText(genre) + 28f
+        x += genreWidth + 28f
         p.color = 0xFF9B5CFF.toInt()
         canvas.drawText("|",x,metadataY,p)
         x += 27f
@@ -172,7 +179,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         x += 43f
         p.color = 0xFFF0EAF5.toInt()
         canvas.drawText(rating,x,metadataY,p)
-        x += p.measureText(rating) + 28f
+        x += ratingWidth + 28f
         p.color = 0xFF9B5CFF.toInt()
         canvas.drawText("|",x,metadataY,p)
         x += 27f
@@ -184,18 +191,20 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         p.color = 0xFFB98AFF.toInt()
         p.textSize = 21f
         p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText("SINOPSE",margin,synopsisTitleY,p)
+        val synopsisLabel = "SINOPSE"
+        canvas.drawText(synopsisLabel,(width-p.measureText(synopsisLabel))/2f,synopsisTitleY,p)
 
         p.color = 0xFFF0EAF5.toInt()
         p.textSize = 28f
         p.typeface = Typeface.create("sans-serif",Typeface.NORMAL)
         var sy = synopsisStartY
-        synopsis.forEach { canvas.drawText(it,margin,sy,p); sy += synopsisLineHeight }
+        synopsis.forEach { canvas.drawText(it,(width-p.measureText(it))/2f,sy,p); sy += synopsisLineHeight }
 
         p.color = 0xFFB98AFF.toInt()
         p.textSize = 21f
         p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText("CENAS DO FILME",margin,stillTitleY,p)
+        val stillLabel = "CENAS DO FILME"
+        canvas.drawText(stillLabel,(width-p.measureText(stillLabel))/2f,stillTitleY,p)
 
         val gap = 16f
         val cardWidth = (contentWidth-gap*2)/3f
@@ -215,7 +224,8 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             } else {
                 p.color = 0xFF9B5CFF.toInt()
                 p.textSize = 17f
-                canvas.drawText("CINEVERSO",left+18f,stillTop+stillHeight/2,p)
+                val placeholder = "CINEVERSO"
+                canvas.drawText(placeholder,left+(cardWidth-p.measureText(placeholder))/2f,stillTop+stillHeight/2,p)
             }
         }
 
@@ -231,7 +241,8 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         p.color = 0xFFE8DDF2.toInt()
         p.textSize = 17f
         p.typeface = Typeface.create("sans-serif-medium",Typeface.BOLD)
-        canvas.drawText("CINEVERSO",margin,buttonTop+112f,p)
+        val footer = "CINEVERSO"
+        canvas.drawText(footer,(width-p.measureText(footer))/2f,buttonTop+112f,p)
 
         val dir = File(context.cacheDir,"shared_recommendations").apply { mkdirs() }
         val output = File(dir,"cineverso_${item.type}_${item.id}.png")
