@@ -263,8 +263,9 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         }
         // Fit the complete Brazilian Portuguese title into the hero area.
         var titleLines = wrapShareText(title, titlePaint, 990f)
-        while (titleLines.size > 2 && titlePaint.textSize > 48f) {
-            titlePaint.textSize -= 4f
+        while ((titleLines.size > 2 || titleLines.any { titlePaint.measureText(it) > 990f }) &&
+            titlePaint.textSize > 42f) {
+            titlePaint.textSize -= 3f
             titleLines = wrapShareText(title, titlePaint, 990f)
         }
         val titleLineHeight = titlePaint.textSize * 1.02f
