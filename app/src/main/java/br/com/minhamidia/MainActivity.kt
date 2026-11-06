@@ -284,14 +284,18 @@ class MainActivity : ComponentActivity() {
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var sharingRecommendation by remember { mutableStateOf(false) }
             var pendingSceneItem by remember { mutableStateOf<TmdbResult?>(null) }
+            var waitingForSceneSelection by remember { mutableStateOf(false) }
             val sceneImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { selectedUris ->
                 val selectedItem = pendingSceneItem
+                waitingForSceneSelection = false
                 if (selectedItem != null) {
                     if (selectedUris.size < 3) {
                         Toast.makeText(this@MainActivity, "Selecione três capturas de cenas para continuar.", Toast.LENGTH_LONG).show()
                         sharingRecommendation = false
                         pendingSceneItem = null
                     } else {
+                        Toast.makeText(this@MainActivity, "Gerando seu card com as três cenas…", Toast.LENGTH_LONG).show()
+                        sharingRecommendation = true
                         lifecycleScope.launch {
                             try {
                                 val imageUri = createCineVersoShareCard(this@MainActivity, selectedItem, apiKey, selectedUris.take(3))
@@ -303,17 +307,15 @@ class MainActivity : ComponentActivity() {
                                 }
                                 startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
                             } catch (error: Exception) {
-                                Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique as imagens selecionadas"}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, "Falha ao gerar o card: ${error.message ?: "verifique as imagens selecionadas"}", Toast.LENGTH_LONG).show()
                             } finally {
                                 sharingRecommendation = false
                                 pendingSceneItem = null
+                                waitingForSceneSelection = false
                             }
                         }
                     }
                 }
-            }
-            val googleSceneSearch = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                if (pendingSceneItem != null) sceneImagePicker.launch(arrayOf("image/*"))
             }
             var showKey by remember { mutableStateOf(false) }
             var updateChecking by remember { mutableStateOf(false) }
@@ -782,7 +784,8 @@ class MainActivity : ComponentActivity() {
                                                                 val searchTerm = if (selectedTitle.type == "tv") "episode screenshots" else "movie scenes screenshots"
                                                                 val searchUrl = "https://www.google.com/search?tbm=isch&q=" +
                                                                     Uri.encode("$originalTitle $searchTerm -poster -fanart -wallpaper -banner -logo")
-                                                                googleSceneSearch.launch(Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl)))
+                                                                waitingForSceneSelection = true
+                                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl)))
                                                             } catch (error: Exception) {
                                                                 Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
                                                             } finally {
@@ -802,6 +805,17 @@ class MainActivity : ComponentActivity() {
                                                         Text("GERANDO CARD…", fontWeight = FontWeight.Bold)
                                                     }
                                                 } else Text("COMPARTILHAR RECOMENDAÇÃO", fontWeight = FontWeight.Bold)
+                                            }
+                                            if (waitingForSceneSelection && pendingSceneItem?.id == selectedTitle.id) {
+                                                Spacer(Modifier.height(8.dp))
+                                                Button(
+                                                    onClick = { sceneImagePicker.launch(arrayOf("image/*")) },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                                                ) {
+                                                    Text("JÁ ESCOLHI AS 3 CENAS — GERAR CARD", color = Color.White, fontWeight = FontWeight.Bold)
+                                                }
+                                                Text("Depois de salvar as três capturas do Google Imagens, volte aqui e toque no botão acima. A geração começará automaticamente.", color = Muted, fontSize = 11.sp)
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
