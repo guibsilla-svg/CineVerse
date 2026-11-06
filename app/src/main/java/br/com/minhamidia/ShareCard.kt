@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.MediaStore
 import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
+import br.com.minhamidia.data.SceneImageSearchClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -152,7 +153,7 @@ private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
     paint.style = Paint.Style.FILL
 }
 
-suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
+suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String, sceneSearchKey: String): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
         // Test every landscape hero source and reject blank/near-black artwork.
@@ -162,8 +163,12 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             info?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" },
             info?.fanartBannerUrl
         ).distinct()
-        val sceneUrls = (info?.stillPaths.orEmpty().map { "https://image.tmdb.org/t/p/w1280$it" } +
+        val verifiedProviderFrames = (info?.stillPaths.orEmpty().map { "https://image.tmdb.org/t/p/w1280$it" } +
             info?.fanartStillUrls.orEmpty()).distinct()
+        val searchedFrames = if (verifiedProviderFrames.size < 3) {
+            SceneImageSearchClient.search(info?.originalTitle?.takeIf { it.isNotBlank() } ?: item.title, item.type, sceneSearchKey)
+        } else emptyList()
+        val sceneUrls = (verifiedProviderFrames + searchedFrames).distinct()
         val (hero, posterFallback, stills) = coroutineScope {
             val heroTask = async {
                 heroCandidates.firstNotNullOfOrNull { url ->
@@ -182,6 +187,12 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
                 downloadShareImage("https://image.tmdb.org/t/p/w780$it")
             } else null
             Triple(selectedHero, poster, stillTasks.awaitAll().filterNotNull().take(3))
+        }
+        if (stills.size < 3) {
+            stills.forEach { it.recycle() }
+            hero?.recycle()
+            posterFallback?.recycle()
+            throw IllegalStateException("Foram encontradas apenas ${stills.size} capturas válidas de cenas. O card não será gerado com miniaturas vazias ou artes promocionais. Configure uma chave Brave Search válida ou tente outro título.")
         }
 
         val width = 1080
@@ -324,8 +335,8 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             drawCentered(canvas, line, synopsisTop + index * synopsisLineHeight, synopsisPaint)
         }
 
-        // Only TMDB backdrops are used as scene thumbnails. Missing frames remain
-        // neutral placeholders rather than being replaced by promotional artwork.
+        // Exactly three validated frame captures are required; no poster, banner or
+        // promotional artwork is ever substituted into the scene-thumbnail row.
         val gap = 16f
         val stillWidth = (contentWidth - gap * 2f) / 3f
         for (index in 0..2) {
