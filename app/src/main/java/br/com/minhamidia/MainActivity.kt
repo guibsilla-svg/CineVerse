@@ -253,7 +253,6 @@ class MainActivity : ComponentActivity() {
             var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
             var featuredTitle by remember { mutableStateOf(prefs.getString("featured_title", "") ?: "") }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
-            var sceneSearchKey by remember { mutableStateOf(prefs.getString("brave_search_key", "") ?: "") }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
             val pageHistory = remember { mutableStateListOf<String>() }
@@ -284,6 +283,36 @@ class MainActivity : ComponentActivity() {
             var recommendationsError by remember { mutableStateOf("") }
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var sharingRecommendation by remember { mutableStateOf(false) }
+            var pendingSceneItem by remember { mutableStateOf<TmdbResult?>(null) }
+            val sceneImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { selectedUris ->
+                val selectedItem = pendingSceneItem
+                if (selectedItem != null) {
+                    if (selectedUris.size < 3) {
+                        Toast.makeText(this@MainActivity, "Selecione três capturas de cenas para continuar.", Toast.LENGTH_LONG).show()
+                    } else {
+                        lifecycleScope.launch {
+                            try {
+                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedItem, apiKey, selectedUris.take(3))
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/png"
+                                    putExtra(Intent.EXTRA_STREAM, imageUri)
+                                    clipData = android.content.ClipData.newUri(contentResolver, "Card CineVerso", imageUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
+                            } catch (error: Exception) {
+                                Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique as imagens selecionadas"}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                sharingRecommendation = false
+                                pendingSceneItem = null
+                            }
+                        }
+                    }
+                }
+            }
+            val googleSceneSearch = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                if (pendingSceneItem != null) sceneImagePicker.launch(arrayOf("image/*"))
+            }
             var showKey by remember { mutableStateOf(false) }
             var updateChecking by remember { mutableStateOf(false) }
             var updateMessage by remember { mutableStateOf("") }
@@ -744,14 +773,14 @@ class MainActivity : ComponentActivity() {
                                                         Toast.makeText(this@MainActivity, "Preparando seu card…", Toast.LENGTH_SHORT).show()
                                                         lifecycleScope.launch {
                                                             try {
-                                                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle, apiKey, sceneSearchKey)
-                                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                                    type = "image/png"
-                                                                    putExtra(Intent.EXTRA_STREAM, imageUri)
-                                                                    clipData = android.content.ClipData.newUri(contentResolver, "Card CineVerso", imageUri)
-                                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                                }
-                                                                startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
+                                                                pendingSceneItem = selectedTitle
+                                                                val originalTitle = runCatching {
+                                                                    TmdbClient.shareCardDetails(selectedTitle.id, selectedTitle.type, apiKey).originalTitle
+                                                                }.getOrNull()?.takeIf { it.isNotBlank() } ?: selectedTitle.title
+                                                                val searchTerm = if (selectedTitle.type == "tv") "episode screenshots" else "movie scenes screenshots"
+                                                                val searchUrl = "https://www.google.com/search?tbm=isch&q=" +
+                                                                    Uri.encode("\\"$originalTitle\\" $searchTerm -poster -fanart -wallpaper -banner -logo")
+                                                                googleSceneSearch.launch(Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl)))
                                                             } catch (error: Exception) {
                                                                 Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
                                                             } finally {
@@ -1268,21 +1297,8 @@ class MainActivity : ComponentActivity() {
                                 Button(onClick = { showKey = true }, modifier = Modifier.fillMaxWidth()) { Text(if (apiKey.isBlank()) "Configurar chave TMDB" else "Alterar chave TMDB") }
                                 Spacer(Modifier.height(8.dp))
                                 Divider(color = Muted.copy(alpha = .25f))
-                                Text("PESQUISA DE CENAS REAIS", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text("O CineVerso pesquisa capturas em arquivos especializados usando o título original em inglês ou no idioma nativo. A busca usa a Brave Search API; os resultados são filtrados por fontes de screencaps e validados como imagens. A chave fica salva somente neste aparelho.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
-                                OutlinedTextField(
-                                    value = sceneSearchKey,
-                                    onValueChange = { sceneSearchKey = it.trim() },
-                                    label = { Text("Chave da Brave Search API") },
-                                    placeholder = { Text("Cole sua chave aqui") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Button(
-                                    onClick = { prefs.edit().putString("brave_search_key", sceneSearchKey.trim()).apply(); message = "Chave de pesquisa de cenas salva neste aparelho." },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text(if (sceneSearchKey.isBlank()) "Salvar chave de pesquisa" else "Salvar chave de pesquisa") }
-                                Text("Obtenha uma chave em api.search.brave.com. O plano Search inclui créditos gratuitos mensais; consultas adicionais podem ser cobradas.", color = Muted, fontSize = 11.sp)
+                                Text("TRÊS CENAS PARA SUA INDICAÇÃO", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Ao gerar uma indicação, o CineVerso abre o Google Imagens com o título original e termos de busca por cenas. Salve três capturas reais no aparelho; ao voltar, selecione as três imagens. Não usamos API paga nem substituímos cenas por pôsteres ou artes promocionais.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 OutlinedButton(onClick = {
                                     val json = JSONArray()
                                     all.forEach { m -> json.put(JSONObject().put("title", m.title).put("tmdbId", m.tmdbId).put("mediaType", m.mediaType).put("year", m.year).put("posterPath", m.posterPath).put("overview", m.overview).put("status", m.status).put("rating", m.rating).put("watchedAt", m.watchedAt).put("runtimeMinutes", m.runtimeMinutes).put("genres", m.genres).put("totalSeasons", m.totalSeasons).put("watchedEpisodes", m.watchedEpisodes).put("totalEpisodes", m.totalEpisodes).put("releaseDate", m.releaseDate)) }
