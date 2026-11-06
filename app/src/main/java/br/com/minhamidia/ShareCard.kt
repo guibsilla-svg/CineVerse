@@ -317,7 +317,19 @@ suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, c
         val mediaTypeLabel = if (item.type == "tv") {
             val seasons = info?.seasonsCount ?: 0
             "SÉRIE" + if (seasons > 0) " • $seasons " + if (seasons == 1) "TEMPORADA" else "TEMPORADAS" else ""
-        } else "FILME"
+        } else {
+            val minutes = info?.runtimeMinutes ?: 0
+            val duration = if (minutes > 0) {
+                val hours = minutes / 60
+                val remainingMinutes = minutes % 60
+                when {
+                    hours > 0 && remainingMinutes > 0 -> " • \${hours}h \${remainingMinutes}min"
+                    hours > 0 -> " • \${hours}h"
+                    else -> " • \${remainingMinutes}min"
+                }
+            } else ""
+            "FILME$duration"
+        }
         val metaText = "$genre  |  ★ $rating/10  |  $year"
         metaPaint.textSize = if (metaPaint.measureText(metaText) > textWidth) 19f else 25f
         canvas.drawText(metaText, textLeft, metaY, metaPaint)
