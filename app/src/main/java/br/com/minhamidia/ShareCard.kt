@@ -205,7 +205,7 @@ private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
     paint.style = Paint.Style.FILL
 }
 
-suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String, selectedSceneUris: List<Uri>): Uri =
+suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String, selectedSceneUris: List<Uri>, selectedHeroUri: Uri? = null): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
         // Test every landscape hero source and reject blank/near-black artwork.
@@ -219,11 +219,20 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             "Selecione três capturas reais de cenas para gerar a indicação."
         }
         val (hero, posterFallback) = run {
-            val selectedHero = heroCandidates.firstNotNullOfOrNull { url ->
+            // A banner explicitly selected by the user always wins. Decode it from
+            // the content URI in memory; do not copy it into shared/external storage.
+            val manualHero = selectedHeroUri?.let { uri ->
+                runCatching { decodeSelectedScene(context, uri) }.getOrNull()
+            }?.takeIf { bitmap ->
+                if (bitmap != null && hasUsablePicture(bitmap, minRatio = 1.15f)) bitmap
+                else { bitmap?.recycle(); false }
+            }
+            val remoteHero = if (manualHero == null) heroCandidates.firstNotNullOfOrNull { url ->
                 downloadShareImage(url)?.let { bitmap ->
                     if (hasUsablePicture(bitmap)) bitmap else { bitmap.recycle(); null }
                 }
-            }
+            } else null
+            val selectedHero = manualHero ?: remoteHero
             val poster = if (selectedHero == null) item.posterPath?.let {
                 downloadShareImage("https://image.tmdb.org/t/p/w780$it")
             } else null
