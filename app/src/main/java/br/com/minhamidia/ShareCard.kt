@@ -48,6 +48,22 @@ private fun decodeSampledShareImage(openStream: () -> InputStream?, maxWidth: In
     return openStream()?.use { BitmapFactory.decodeStream(it, null, options) }
 }
 
+// Copy a user-selected content URI once into the app cache before decoding.
+ // Some document/cloud providers expose a one-shot or non-seekable stream; the
+ // previous two-open decode could read bounds successfully and then fail decoding.
+private fun decodeSelectedScene(context: Context, uri: Uri): Bitmap? {
+    val temp = File.createTempFile("cineverso_scene_", ".img", context.cacheDir)
+    return try {
+        val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+            temp.outputStream().buffered().use { output -> input.copyTo(output) }
+        } ?: return null
+        if (copied <= 0L) return null
+        decodeSampledShareImage({ temp.inputStream() }, 720, 420)
+    } finally {
+        temp.delete()
+    }
+}
+
 private fun downloadShareImage(url: String): Bitmap? = runCatching {
     decodeSampledShareImage({ openShareImageStream(url) }, 1440, 960)
 }.getOrNull()
@@ -193,22 +209,13 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             selectedHero to poster
         }
         val stills = selectedSceneUris.take(3).mapNotNull { uri ->
-            runCatching {
-                decodeSampledShareImage(
-                    { context.contentResolver.openInputStream(uri) },
-                    720,
-                    420
-                )
-            }.getOrNull()?.let { bitmap ->
-                if (hasUsableScene(bitmap)) bitmap
-                else { bitmap.recycle(); null }
-            }
+            runCatching { decodeSelectedScene(context, uri) }.getOrNull()
         }
         if (stills.size != 3) {
             stills.forEach { it.recycle() }
             hero?.recycle()
             posterFallback?.recycle()
-            throw IllegalStateException("Uma ou mais imagens selecionadas não são capturas válidas. Escolha três imagens horizontais e tente novamente.")
+            throw IllegalStateException("Não foi possível ler uma das três imagens. Selecione os arquivos de imagem salvos no aparelho (JPG, PNG ou WEBP) e tente novamente.")
         }
 
         val width = 1080
