@@ -191,18 +191,26 @@ object TmdbClient {
         }
         val leadActor = credits.optJSONArray("cast")?.optJSONObject(0)?.optString("name").orEmpty()
         val backdrops = images.optJSONArray("backdrops")
+        // Use the official TMDB detail backdrop first when available. The old
+        // narrow filter could leave the hero empty for titles whose artwork had
+        // a slightly different aspect ratio or resolution.
+        val detailBackdrop = details.optString("backdrop_path").takeIf { it.startsWith("/") }
         val backdropCandidates = backdrops?.let { array ->
             (0 until array.length()).mapNotNull { index ->
                 val image = array.optJSONObject(index) ?: return@mapNotNull null
                 val path = image.optString("file_path")
                 val ratio = image.optDouble("aspect_ratio", 0.0)
                 val width = image.optInt("width", 0)
-                if (path.startsWith("/") && ratio in 1.45..2.05 && width >= 900) {
+                if (path.startsWith("/") && ratio >= 1.20 && width >= 500) {
                     Triple(path, image.optDouble("vote_average", 0.0), width)
                 } else null
-            }.sortedWith(compareByDescending<Triple<String, Double, Int>> { it.second }.thenByDescending { it.third })
+            }.sortedWith(
+                compareByDescending<Triple<String, Double, Int>> { it.second }
+                    .thenByDescending { it.third }
+            )
         }.orEmpty()
-        val backdropPath = backdropCandidates.firstOrNull()?.first
+        val backdropPath = detailBackdrop
+            ?: backdropCandidates.firstOrNull()?.first
         // For series, collect episode stills from multiple real seasons. Never fall back
         // to series backdrops, posters, banners or logos for the three scene screenshots.
         val episodeStills: List<String> = if (type == "tv") runCatching<List<String>> {
