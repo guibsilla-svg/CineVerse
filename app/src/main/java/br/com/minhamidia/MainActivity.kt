@@ -253,6 +253,7 @@ class MainActivity : ComponentActivity() {
             var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
             var featuredTitle by remember { mutableStateOf(prefs.getString("featured_title", "") ?: "") }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
+            var sceneSearchKey by remember { mutableStateOf(prefs.getString("brave_search_key", "") ?: "") }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
             val pageHistory = remember { mutableStateListOf<String>() }
@@ -743,7 +744,7 @@ class MainActivity : ComponentActivity() {
                                                         Toast.makeText(this@MainActivity, "Preparando seu card…", Toast.LENGTH_SHORT).show()
                                                         lifecycleScope.launch {
                                                             try {
-                                                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
+                                                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedTitle, apiKey, sceneSearchKey)
                                                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                                                     type = "image/png"
                                                                     putExtra(Intent.EXTRA_STREAM, imageUri)
@@ -1266,6 +1267,22 @@ class MainActivity : ComponentActivity() {
                                 Text("A chave fica salva neste aparelho e é usada para buscar títulos, sinopses, pôsteres e avaliações.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 Button(onClick = { showKey = true }, modifier = Modifier.fillMaxWidth()) { Text(if (apiKey.isBlank()) "Configurar chave TMDB" else "Alterar chave TMDB") }
                                 Spacer(Modifier.height(8.dp))
+                                Divider(color = Muted.copy(alpha = .25f))
+                                Text("PESQUISA DE CENAS REAIS", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("O CineVerso pesquisa capturas em arquivos especializados usando o título original em inglês ou no idioma nativo. A busca usa a Brave Search API; os resultados são filtrados por fontes de screencaps e validados como imagens. A chave fica salva somente neste aparelho.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                OutlinedTextField(
+                                    value = sceneSearchKey,
+                                    onValueChange = { sceneSearchKey = it.trim() },
+                                    label = { Text("Chave da Brave Search API") },
+                                    placeholder = { Text("Cole sua chave aqui") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Button(
+                                    onClick = { prefs.edit().putString("brave_search_key", sceneSearchKey.trim()).apply(); message = "Chave de pesquisa de cenas salva neste aparelho." },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (sceneSearchKey.isBlank()) "Salvar chave de pesquisa" else "Salvar chave de pesquisa") }
+                                Text("Obtenha uma chave em api.search.brave.com. O plano Search inclui créditos gratuitos mensais; consultas adicionais podem ser cobradas.", color = Muted, fontSize = 11.sp)
                                 OutlinedButton(onClick = {
                                     val json = JSONArray()
                                     all.forEach { m -> json.put(JSONObject().put("title", m.title).put("tmdbId", m.tmdbId).put("mediaType", m.mediaType).put("year", m.year).put("posterPath", m.posterPath).put("overview", m.overview).put("status", m.status).put("rating", m.rating).put("watchedAt", m.watchedAt).put("runtimeMinutes", m.runtimeMinutes).put("genres", m.genres).put("totalSeasons", m.totalSeasons).put("watchedEpisodes", m.watchedEpisodes).put("totalEpisodes", m.totalEpisodes).put("releaseDate", m.releaseDate)) }
