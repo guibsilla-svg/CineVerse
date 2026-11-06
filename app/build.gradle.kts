@@ -26,21 +26,6 @@ android {
             keyPassword = System.getenv("CINEVERSE_KEY_PASSWORD") ?: ""
         }
     }
-    flavorDimensions += "edition"
-    productFlavors {
-        create("publicEdition") {
-            dimension = "edition"
-            applicationIdSuffix = ".public"
-            manifestPlaceholders["appLabel"] = "CineVerso Público"
-            buildConfigField("boolean", "IS_OWNER_BUILD", "false")
-        }
-        create("owner") {
-            dimension = "edition"
-            // Keep the original package ID so the existing private V1 install upgrades in place.
-            manifestPlaceholders["appLabel"] = "CineVerso Owner"
-            buildConfigField("boolean", "IS_OWNER_BUILD", "true")
-        }
-    }
     buildTypes {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
