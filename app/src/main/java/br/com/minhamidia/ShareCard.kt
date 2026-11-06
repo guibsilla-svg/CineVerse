@@ -75,13 +75,19 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
         val heroPath = info?.backdropPath ?: item.posterPath
+        val fanartHeroUrl = info?.fanartBackgroundUrl ?: info?.fanartBannerUrl
         val imagePaths = info?.stillPaths.orEmpty().take(3)
-        val (hero, stills) = coroutineScope {
-            val heroTask = async { heroPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280$it") } }
-            val stillTasks = imagePaths.map { path ->
-                async { downloadShareImage("https://image.tmdb.org/t/p/w780$path") }
+        val fanartStillUrls = info?.fanartStillUrls.orEmpty().take(3)
+        val (hero, stills, fanartLogo) = coroutineScope {
+            val heroTask = async {
+                fanartHeroUrl?.let { downloadShareImage(it) }
+                    ?: heroPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280$it") }
+                    ?: info?.fanartPosterUrl?.let { downloadShareImage(it) }
             }
-            heroTask.await() to stillTasks.awaitAll().filterNotNull()
+            val stillTasks = (fanartStillUrls + imagePaths.map { "https://image.tmdb.org/t/p/w780$it" })
+                .distinct().take(3).map { imageUrl -> async { downloadShareImage(imageUrl) } }
+            val logoTask = async { info?.fanartLogoUrl?.let { downloadShareImage(it) } }
+            Triple(heroTask.await(), stillTasks.awaitAll().filterNotNull(), logoTask.await())
         }
 
         val width = 1080
@@ -144,14 +150,28 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         canvas.drawText(if (item.type == "tv") "SÉRIE EM DESTAQUE" else "FILME EM DESTAQUE", margin, 155f, paint)
 
-        paint.color = Color.WHITE
-        paint.textSize = 76f
-        paint.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-        val titleLines = wrapShareText(item.title.uppercase(Locale("pt", "BR")), paint, 900f).take(2)
-        var titleY = if (titleLines.size == 1) 430f else 370f
-        titleLines.forEach {
-            canvas.drawText(it, margin, titleY, paint)
-            titleY += 82f
+        if (fanartLogo != null) {
+            val maxLogoWidth = contentWidth * 0.88f
+            val maxLogoHeight = 150f
+            val scale = minOf(maxLogoWidth / fanartLogo.width, maxLogoHeight / fanartLogo.height)
+            val logoWidth = fanartLogo.width * scale
+            val logoHeight = fanartLogo.height * scale
+            canvas.drawBitmap(
+                fanartLogo, null,
+                RectF((width - logoWidth) / 2f, 300f, (width + logoWidth) / 2f, 300f + logoHeight),
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            )
+            fanartLogo.recycle()
+        } else {
+            paint.color = Color.WHITE
+            paint.textSize = 76f
+            paint.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            val titleLines = wrapShareText(item.title.uppercase(Locale("pt", "BR")), paint, 900f).take(2)
+            var titleY = if (titleLines.size == 1) 430f else 370f
+            titleLines.forEach {
+                canvas.drawText(it, margin, titleY, paint)
+                titleY += 82f
+            }
         }
 
         val actor = info?.leadActor.orEmpty()
