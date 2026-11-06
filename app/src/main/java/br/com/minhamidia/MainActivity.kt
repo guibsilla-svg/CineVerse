@@ -275,6 +275,8 @@ class MainActivity : ComponentActivity() {
             var detailReturnPage by remember { mutableStateOf("Buscar") }
             var detailSeasons by remember { mutableStateOf("[]") }
             var detailLoading by remember { mutableStateOf(false) }
+            var detailRuntimeMinutes by remember { mutableStateOf<Int?>(null) }
+            var detailRuntimeLoading by remember { mutableStateOf(false) }
             var detailTrailer by remember { mutableStateOf<br.com.minhamidia.data.TmdbTrailer?>(null) }
             var detailTrailerLoading by remember { mutableStateOf(false) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
@@ -383,6 +385,20 @@ class MainActivity : ComponentActivity() {
                     detailCastLoading = false
                 } else { detailCast = emptyList(); detailCastLoading = false }
             }
+            LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
+                val selected = detailItem
+                detailRuntimeMinutes = null
+                if (page == "Detalhes" && selected != null && selected.type == "movie" && apiKey.isNotBlank()) {
+                    detailRuntimeLoading = true
+                    detailRuntimeMinutes = runCatching {
+                        TmdbClient.movieReleaseInfo(selected.id, apiKey).optInt("runtime", 0)
+                    }.getOrNull()?.takeIf { it > 0 }
+                    detailRuntimeLoading = false
+                } else {
+                    detailRuntimeLoading = false
+                }
+            }
+
             LaunchedEffect(page, detailItem?.id, detailItem?.type, apiKey) {
                 val selected = detailItem
                 if (page == "Detalhes" && selected != null && apiKey.isNotBlank()) {
@@ -775,6 +791,17 @@ class MainActivity : ComponentActivity() {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(selectedTitle.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                                     Text("${if (selectedTitle.type == "tv") "Série" else "Filme"} • ${selectedTitle.year}", color = Muted)
+                                                    if (selectedTitle.type == "movie") {
+                                                        val minutes = detailRuntimeMinutes
+                                                        val durationLabel = when {
+                                                            detailRuntimeLoading -> "Duração: carregando..."
+                                                            minutes == null -> "Duração: indisponível"
+                                                            minutes >= 60 && minutes % 60 > 0 -> "Duração: ${minutes / 60}h${minutes % 60}"
+                                                            minutes >= 60 -> "Duração: ${minutes / 60}h"
+                                                            else -> "Duração: ${minutes}min"
+                                                        }
+                                                        Text(durationLabel, color = Muted, fontSize = 12.sp)
+                                                    }
                                                     Text(tmdbRatingLabel(selectedTitle.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                                     Spacer(Modifier.height(8.dp))
                                                     Text(selectedTitle.overview.ifBlank { "Sinopse indisponível." }, color = Muted, fontSize = 13.sp)
