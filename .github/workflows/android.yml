@@ -57,11 +57,14 @@ jobs:
           tag_name: v${{ env.APP_VERSION_NAME }}
           name: CineVerso ${{ env.APP_VERSION_NAME }}
           generate_release_notes: true
-          files: app/build/outputs/apk/publicEdition/release/cineverse.apk,app/build/outputs/apk/owner/release/cineverso-owner.apk
+          files: |
+            app/build/outputs/apk/publicEdition/release/cineverse.apk
+            app/build/outputs/apk/owner/release/cineverso-owner.apk
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cineverse-release-apk
-          path: app/build/outputs/apk/publicEdition/release/cineverse.apk
+          name: cineverso-apks
+          path: |
+            app/build/outputs/apk/publicEdition/release/cineverse.apk
             app/build/outputs/apk/owner/release/cineverso-owner.apk
           if-no-files-found: error
