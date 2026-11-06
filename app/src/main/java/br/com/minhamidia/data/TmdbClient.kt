@@ -170,45 +170,40 @@ object TmdbClient {
         }
         val leadActor = credits.optJSONArray("cast")?.optJSONObject(0)?.optString("name").orEmpty()
         val backdrops = images.optJSONArray("backdrops")
-        val backdropPath = backdrops?.let { array ->
-            (0 until array.length()).asSequence()
-                .mapNotNull { array.optJSONObject(it)?.optString("file_path") }
-                .firstOrNull { it.startsWith("/") }
-        }
-        val backdropStills = backdrops?.let { array ->
-            (0 until array.length()).asSequence()
-                .mapNotNull { array.optJSONObject(it)?.let { image ->
-                    val path = image.optString("file_path")
-                    val ratio = image.optDouble("aspect_ratio", 0.0)
-                    val width = image.optInt("width", 0)
-                    if (path.startsWith("/") && path != backdropPath && ratio >= 1.5 && width >= 900) path else null
-                } }
-                .take(3)
-                .toList()
+        val backdropCandidates = backdrops?.let { array ->
+            (0 until array.length()).mapNotNull { index ->
+                val image = array.optJSONObject(index) ?: return@mapNotNull null
+                val path = image.optString("file_path")
+                val ratio = image.optDouble("aspect_ratio", 0.0)
+                val width = image.optInt("width", 0)
+                if (path.startsWith("/") && ratio in 1.45..2.05 && width >= 900) {
+                    Triple(path, image.optDouble("vote_average", 0.0), width)
+                } else null
+            }.sortedWith(compareByDescending<Triple<String, Double, Int>> { it.second }.thenByDescending { it.third })
         }.orEmpty()
-        // For series, use actual episode stills (not show posters, banners or key art).
-        // For movies, TMDB exposes cinematic scene imagery in the backdrops collection.
+        val backdropPath = backdropCandidates.firstOrNull()?.first
+        // TMDB's movie backdrops are the eligible cinematic frame collection.
+        val backdropStills = backdropCandidates.map { it.first }.distinct().take(9)
+        // For series, collect episode stills from multiple real seasons. Never fall back
+        // to series backdrops, posters, banners or logos for the three scene screenshots.
         val episodeStills = if (type == "tv") runCatching {
             val seasons = details.optJSONArray("seasons")
-            val seasonNumber = seasons?.let { array ->
-                (0 until array.length()).asSequence()
-                    .mapNotNull { array.optJSONObject(it)?.optInt("season_number") }
-                    .firstOrNull { it > 0 }
+            val seasonNumbers = seasons?.let { array ->
+                (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optInt("season_number") }
+                    .filter { it > 0 }.take(4)
+            }.orEmpty()
+            coroutineScope {
+                seasonNumbers.map { seasonNumber -> async {
+                    val episodes = requestObject("/tv/$id/season/$seasonNumber", credential, mapOf("language" to "pt-BR"))
+                        .optJSONArray("episodes")
+                    episodes?.let { array ->
+                        (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("still_path") }
+                            .filter { it.startsWith("/") }.distinct()
+                    }.orEmpty()
+                } }.awaitAll().flatten().distinct().take(9)
             }
-            if (seasonNumber != null) {
-                val episodes = requestObject("/tv/$id/season/$seasonNumber", credential, mapOf("language" to "pt-BR"))
-                    .optJSONArray("episodes")
-                episodes?.let { array ->
-                    (0 until array.length()).asSequence()
-                        .mapNotNull { array.optJSONObject(it)?.optString("still_path") }
-                        .filter { it.startsWith("/") }
-                        .distinct()
-                        .take(3)
-                        .toList()
-                }.orEmpty()
-            } else emptyList()
         }.getOrDefault(emptyList()) else emptyList()
-        val stillPaths = (episodeStills.ifEmpty { backdropStills }).take(3)
+        val stillPaths = if (type == "tv") episodeStills else backdropStills
         val fanart = runCatching { FanartClient.artwork(id, type) }.getOrNull()
         return TmdbShareCardDetails(
             leadActor, genres, backdropPath, stillPaths,
