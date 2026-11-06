@@ -46,19 +46,22 @@ jobs:
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
         run: |
           test -n "$OMDB_API_KEY" || (echo "Missing GitHub secret OMDB_API_KEY" && exit 1)
-          gradle --no-daemon assembleRelease -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME"
-      - name: Prepare release APK
-        run: cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/cineverse.apk
+          gradle --no-daemon assemblePublicEditionRelease assembleOwnerRelease -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME"
+      - name: Prepare release APKs
+        run: |
+          cp app/build/outputs/apk/publicEdition/release/app-publicEdition-release.apk app/build/outputs/apk/publicEdition/release/cineverse.apk
+          cp app/build/outputs/apk/owner/release/app-owner-release.apk app/build/outputs/apk/owner/release/cineverso-owner.apk
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.APP_VERSION_NAME }}
           name: CineVerso ${{ env.APP_VERSION_NAME }}
           generate_release_notes: true
-          files: app/build/outputs/apk/release/cineverse.apk
+          files: app/build/outputs/apk/publicEdition/release/cineverse.apk,app/build/outputs/apk/owner/release/cineverso-owner.apk
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: cineverse-release-apk
-          path: app/build/outputs/apk/release/cineverse.apk
+          path: app/build/outputs/apk/publicEdition/release/cineverse.apk
+            app/build/outputs/apk/owner/release/cineverso-owner.apk
           if-no-files-found: error
