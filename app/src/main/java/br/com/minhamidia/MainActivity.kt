@@ -285,6 +285,7 @@ class MainActivity : ComponentActivity() {
             var sharingRecommendation by remember { mutableStateOf(false) }
             var pendingSceneItem by remember { mutableStateOf<TmdbResult?>(null) }
             var pendingHeroUri by remember { mutableStateOf<Uri?>(null) }
+            var pendingOriginalTitle by remember { mutableStateOf("") }
             var waitingForHeroSelection by remember { mutableStateOf(false) }
             var waitingForSceneSelection by remember { mutableStateOf(false) }
             val heroImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selectedUri ->
@@ -296,10 +297,10 @@ class MainActivity : ComponentActivity() {
                     waitingForHeroSelection = false
                     val selectedItem = pendingSceneItem
                     if (selectedItem != null) {
-                        val originalTitle = selectedItem.title
+                        val sceneTitle = pendingOriginalTitle.ifBlank { selectedItem.title }
                         val sceneTerm = if (selectedItem.type == "tv") "episode screenshots" else "movie scenes screenshots"
                         val sceneSearchUrl = "https://www.google.com/search?tbm=isch&q=" +
-                            Uri.encode("$originalTitle $sceneTerm -poster -fanart -wallpaper -banner -logo")
+                            Uri.encode("$sceneTitle $sceneTerm -poster -fanart -wallpaper -banner -logo")
                         waitingForSceneSelection = true
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(sceneSearchUrl)))
                     }
@@ -334,6 +335,7 @@ class MainActivity : ComponentActivity() {
                                 sharingRecommendation = false
                                 pendingSceneItem = null
                                 pendingHeroUri = null
+                                pendingOriginalTitle = ""
                                 waitingForHeroSelection = false
                                 waitingForSceneSelection = false
                             }
@@ -806,6 +808,7 @@ class MainActivity : ComponentActivity() {
                                                                 val originalTitle = runCatching {
                                                                     TmdbClient.shareCardDetails(selectedTitle.id, selectedTitle.type, apiKey).originalTitle
                                                                 }.getOrNull()?.takeIf { it.isNotBlank() } ?: selectedTitle.title
+                                                                pendingOriginalTitle = originalTitle
                                                                 val bannerSearchUrl = "https://www.google.com/search?tbm=isch&q=" +
                                                                     Uri.encode("$originalTitle movie backdrop still -poster -logo -collage")
                                                                 waitingForHeroSelection = true
