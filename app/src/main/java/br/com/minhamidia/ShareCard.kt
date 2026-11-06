@@ -209,160 +209,98 @@ private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
 suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
-        // Public edition: editorial recommendation card, deliberately distinct from Owner.
-        val poster = item.posterPath?.let {
-            downloadShareImage("https://image.tmdb.org/t/p/w780${it}")
-        }
+        val backdropCandidates = listOfNotNull(
+            info?.fanartBackgroundUrl,
+            info?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
+        ).distinct()
+        val backdrop = backdropCandidates.firstNotNullOfOrNull { downloadShareImage(it) }
+        val poster = if (backdrop == null) item.posterPath?.let {
+            downloadShareImage("https://image.tmdb.org/t/p/w780$it")
+        } else null
+
         val width = 1080
         val height = 1350
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        paint.shader = LinearGradient(0f, 0f, 0f, height.toFloat(),
+            intArrayOf(0xFF08060D.toInt(), 0xFF1B1028.toInt(), 0xFF08060D.toInt()),
+            null, Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        paint.shader = null
 
-        canvas.drawColor(0xFFF3F0EA.toInt())
-        paint.color = 0xFF241B2B.toInt()
-        canvas.drawRect(0f, 0f, width.toFloat(), 18f, paint)
-
-        val brandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF241B2B.toInt()
-            textSize = 34f
-            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
-            letterSpacing = 2f
+        val heroBottom = 760f
+        if (backdrop != null) {
+            drawCrop(canvas, backdrop, RectF(0f, 0f, width.toFloat(), heroBottom), paint)
+            backdrop.recycle()
+        } else if (poster != null) {
+            drawContain(canvas, poster, RectF(280f, 40f, 800f, heroBottom - 20f), paint)
+            poster.recycle()
         }
-        canvas.drawText("CINEVERSO", 70f, 105f, brandPaint)
-        val editionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF766B78.toInt()
-            textSize = 22f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            textAlign = Paint.Align.RIGHT
-        }
-        canvas.drawText("GUIA DE CINEMA", 1010f, 102f, editionPaint)
+        paint.shader = LinearGradient(0f, 0f, 0f, heroBottom,
+            intArrayOf(0x22000000, 0xF508060D.toInt()), null, Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, width.toFloat(), heroBottom, paint)
+        paint.shader = null
 
-        paint.color = 0xFF6D3C91.toInt()
-        canvas.drawRoundRect(RectF(70f, 155f, 440f, 211f), 28f, 28f, paint)
-        val tagPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
+        if (logo != null) {
+            val scale = minOf(390f / logo.width, 92f / logo.height)
+            canvas.drawBitmap(logo, null, RectF(54f, 28f, 54f + logo.width * scale, 28f + logo.height * scale), paint)
+            logo.recycle()
+        }
+
+        val title = (info?.localizedTitle?.takeIf { it.isNotBlank() } ?: item.title)
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = 22f
-            typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
+            textSize = 76f
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            setShadowLayer(7f, 2f, 3f, Color.BLACK)
+        }
+        var titleLines = wrapShareText(title, titlePaint, 960f)
+        while (titleLines.size > 2 && titlePaint.textSize > 44f) {
+            titlePaint.textSize -= 4f
+            titleLines = wrapShareText(title, titlePaint, 960f)
+        }
+        var titleY = if (titleLines.size == 1) 620f else 555f
+        titleLines.forEach { line ->
+            drawCentered(canvas, line, titleY, titlePaint)
+            titleY += titlePaint.textSize * 1.05f
+        }
+        titlePaint.clearShadowLayer()
+
+        val genre = info?.genres.orEmpty().take(2).joinToString(" • ").ifBlank { "Cinema" }
+        val meta = "$genre   •   ${item.year.ifBlank { "—" }}   •   " +
+            if (item.tmdbVoteAverage > 0.0) String.format(Locale("pt", "BR"), "★ %.1f/10", item.tmdbVoteAverage) else "Sem avaliação TMDB"
+        val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFE0B5FF.toInt()
+            textSize = 29f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("UMA ESCOLHA PARA HOJE", 255f, 192f, tagPaint)
+        canvas.drawText(meta, 540f, 815f, metaPaint)
 
-        val posterRect = RectF(70f, 250f, 480f, 865f)
-        paint.color = 0xFFE0D9D0.toInt()
-        canvas.drawRoundRect(posterRect, 22f, 22f, paint)
-        if (poster != null) {
-            canvas.save()
-            canvas.clipPath(Path().apply {
-                addRoundRect(posterRect, 22f, 22f, Path.Direction.CW)
-            })
-            drawCrop(canvas, poster, posterRect, paint)
-            canvas.restore()
-            poster.recycle()
-        } else {
-            val placeholder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = 0xFF6D3C91.toInt()
-                textSize = 38f
-                typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
-                textAlign = Paint.Align.CENTER
-            }
-            canvas.drawText("CINEVERSO", posterRect.centerX(), posterRect.centerY(), placeholder)
-        }
-
-        val kindPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF806E81.toInt()
-            textSize = 23f
-            typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
-            letterSpacing = 1.5f
-        }
-        canvas.drawText(if (item.type == "tv") "SÉRIE" else "FILME", 535f, 290f, kindPaint)
-
-        val title = info?.localizedTitle?.takeIf { it.isNotBlank() } ?: item.title
-        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF211A25.toInt()
-            textSize = 62f
-            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-        }
-        var titleLines = wrapShareText(title, titlePaint, 470f)
-        while (titleLines.size > 4 && titlePaint.textSize > 42f) {
-            titlePaint.textSize -= 4f
-            titleLines = wrapShareText(title, titlePaint, 470f)
-        }
-        var titleY = 380f
-        titleLines.take(4).forEach { line ->
-            canvas.drawText(line, 535f, titleY, titlePaint)
-            titleY += titlePaint.textSize * 1.02f
-        }
-
-        val genre = info?.genres.orEmpty().take(2).joinToString("  /  ").ifBlank { "Cinema" }
-        val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF6D3C91.toInt()
-            textSize = 25f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        canvas.drawText(genre, 535f, 650f, metaPaint)
-        val yearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF766B78.toInt()
-            textSize = 27f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        canvas.drawText(item.year.ifBlank { "Ano indisponível" }, 535f, 704f, yearPaint)
-
-        val ratingRect = RectF(535f, 755f, 1010f, 855f)
-        paint.color = 0xFFE6D9EF.toInt()
-        canvas.drawRoundRect(ratingRect, 18f, 18f, paint)
-        val ratingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF4C2868.toInt()
-            textSize = 43f
-            typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
-        }
-        val rating = if (item.tmdbVoteAverage > 0.0)
-            String.format(Locale("pt", "BR"), "★  %.1f / 10", item.tmdbVoteAverage)
-        else "★  Sem nota TMDB"
-        canvas.drawText(rating, 565f, 819f, ratingPaint)
-        val sourcePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF806E81.toInt()
-            textSize = 19f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        canvas.drawText("AVALIAÇÃO TMDB", 565f, 842f, sourcePaint)
-
-        paint.color = Color.WHITE
-        canvas.drawRoundRect(RectF(70f, 925f, 1010f, 1220f), 24f, 24f, paint)
-        val synopsisHeading = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF6D3C91.toInt()
-            textSize = 23f
-            typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
-            letterSpacing = 1.2f
-        }
-        canvas.drawText("SOBRE A HISTÓRIA", 112f, 982f, synopsisHeading)
         val synopsis = item.overview.ifBlank { "Uma história que merece entrar na sua lista." }
         val synopsisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF3E3541.toInt()
-            textSize = 29f
+            color = 0xFFF0EAF4.toInt()
+            textSize = 34f
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            textAlign = Paint.Align.CENTER
         }
-        wrapShareText(synopsis, synopsisPaint, 850f).take(5).forEachIndexed { index, line ->
-            canvas.drawText(line, 112f, 1040f + index * 39f, synopsisPaint)
-        }
+        val lines = wrapShareText(synopsis, synopsisPaint, 900f).take(8)
+        lines.forEachIndexed { index, line -> drawCentered(canvas, line, 910f + index * 48f, synopsisPaint) }
 
-        val footerLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFD7CCD9.toInt()
-            strokeWidth = 2f
-        }
-        canvas.drawLine(70f, 1260f, 1010f, 1260f, footerLine)
         val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF6D3C91.toInt()
-            textSize = 27f
+            color = 0xFFB96BEA.toInt()
+            textSize = 35f
             typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
             textAlign = Paint.Align.CENTER
-            letterSpacing = 1f
         }
-        canvas.drawText("MINHA INDICAÇÃO  •  CINEVERSO", 540f, 1310f, footerPaint)
+        canvas.drawText("MINHA INDICAÇÃO  •  CINEVERSO", 540f, 1280f, footerPaint)
 
         val shareDir = File(context.cacheDir, "shared_recommendations").apply { mkdirs() }
         shareDir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }?.drop(2)?.forEach { it.delete() }
-        val outputFile = File(shareDir, "cineverso_public_${item.type}_${item.id}_${System.currentTimeMillis()}.png")
+        val outputFile = File(shareDir, "cineverso_simple_${item.type}_${item.id}_${System.currentTimeMillis()}.png")
         try {
             outputFile.outputStream().buffered().use { stream ->
                 if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
