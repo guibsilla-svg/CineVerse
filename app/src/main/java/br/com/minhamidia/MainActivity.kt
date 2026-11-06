@@ -236,7 +236,7 @@ class MainActivity : ComponentActivity() {
                             val assets = v1Release?.optJSONArray("assets")
                             val apk = assets?.let { array ->
                                 (0 until array.length()).map { array.getJSONObject(it) }
-                                    .firstOrNull { it.optString("name") == "cineverse.apk" }
+                                    .firstOrNull { it.optString("name") == (if (BuildConfig.IS_OWNER_BUILD) "cineverso-owner.apk" else "cineverse.apk") }
                                     ?.optString("browser_download_url")
                             }
                             if (tag.isNotBlank() && apk?.startsWith("https://") == true &&
@@ -796,6 +796,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
+                                            if (BuildConfig.IS_OWNER_BUILD) {
                                             OutlinedButton(
                                                 onClick = {
                                                     if (!sharingRecommendation) {
@@ -854,6 +855,38 @@ class MainActivity : ComponentActivity() {
                                                     Text("JÁ ESCOLHI AS 3 CENAS — GERAR CARD", color = Color.White, fontWeight = FontWeight.Bold)
                                                 }
                                                 Text("Depois de selecionar o banner, escolha três capturas reais de cenas no Google Imagens. Volte aqui e selecione as três imagens para gerar o card.", color = Muted, fontSize = 11.sp)
+                                            }
+                                            }
+                                            if (!BuildConfig.IS_OWNER_BUILD) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        if (!sharingRecommendation) {
+                                                            sharingRecommendation = true
+                                                            lifecycleScope.launch {
+                                                                try {
+                                                                    val imageUri = createSimpleCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
+                                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                                        type = "image/png"
+                                                                        putExtra(Intent.EXTRA_STREAM, imageUri)
+                                                                        clipData = android.content.ClipData.newUri(contentResolver, "Minha Indicação CineVerso", imageUri)
+                                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                                    }
+                                                                    startActivity(Intent.createChooser(shareIntent, "Compartilhar Minha Indicação"))
+                                                                } catch (error: Exception) {
+                                                                    Toast.makeText(this@MainActivity, "Falha ao gerar a indicação: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
+                                                                } finally {
+                                                                    sharingRecommendation = false
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    enabled = !sharingRecommendation,
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC29AFF))
+                                                ) {
+                                                    Text("MINHA INDICAÇÃO", fontWeight = FontWeight.Bold)
+                                                }
+                                                Text("Card automático com banner, título, nota TMDB e sinopse. Não exige escolher ou salvar imagens.", color = Muted, fontSize = 11.sp)
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
