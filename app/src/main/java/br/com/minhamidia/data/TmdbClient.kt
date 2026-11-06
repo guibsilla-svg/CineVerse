@@ -175,13 +175,40 @@ object TmdbClient {
                 .mapNotNull { array.optJSONObject(it)?.optString("file_path") }
                 .firstOrNull { it.startsWith("/") }
         }
-        val stillPaths = backdrops?.let { array ->
+        val backdropStills = backdrops?.let { array ->
             (0 until array.length()).asSequence()
-                .mapNotNull { array.optJSONObject(it)?.optString("file_path") }
-                .filter { it.startsWith("/") && it != backdropPath }
+                .mapNotNull { array.optJSONObject(it)?.let { image ->
+                    val path = image.optString("file_path")
+                    val ratio = image.optDouble("aspect_ratio", 0.0)
+                    val width = image.optInt("width", 0)
+                    if (path.startsWith("/") && path != backdropPath && ratio >= 1.5 && width >= 900) path else null
+                } }
                 .take(3)
                 .toList()
         }.orEmpty()
+        // For series, use actual episode stills (not show posters, banners or key art).
+        // For movies, TMDB exposes cinematic scene imagery in the backdrops collection.
+        val episodeStills = if (type == "tv") runCatching {
+            val seasons = details.optJSONArray("seasons")
+            val seasonNumber = seasons?.let { array ->
+                (0 until array.length()).asSequence()
+                    .mapNotNull { array.optJSONObject(it)?.optInt("season_number") }
+                    .firstOrNull { it > 0 }
+            }
+            if (seasonNumber != null) {
+                val episodes = requestObject("/tv/$id/season/$seasonNumber", credential, mapOf("language" to "pt-BR"))
+                    .optJSONArray("episodes")
+                episodes?.let { array ->
+                    (0 until array.length()).asSequence()
+                        .mapNotNull { array.optJSONObject(it)?.optString("still_path") }
+                        .filter { it.startsWith("/") }
+                        .distinct()
+                        .take(3)
+                        .toList()
+                }.orEmpty()
+            } else emptyList()
+        }.getOrDefault(emptyList()) else emptyList()
+        val stillPaths = (episodeStills.ifEmpty { backdropStills }).take(3)
         val fanart = runCatching { FanartClient.artwork(id, type) }.getOrNull()
         return TmdbShareCardDetails(
             leadActor, genres, backdropPath, stillPaths,
