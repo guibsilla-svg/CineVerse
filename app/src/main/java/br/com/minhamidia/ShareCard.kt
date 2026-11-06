@@ -8,11 +8,7 @@ import android.os.Build
 import android.provider.MediaStore
 import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
-import br.com.minhamidia.data.SceneImageSearchClient
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
@@ -153,7 +149,7 @@ private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
     paint.style = Paint.Style.FILL
 }
 
-suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String, sceneSearchKey: String): Uri =
+suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String, selectedSceneUris: List<Uri>): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
         // Test every landscape hero source and reject blank/near-black artwork.
@@ -163,36 +159,33 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             info?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" },
             info?.fanartBannerUrl
         ).distinct()
-        val verifiedProviderFrames = (info?.stillPaths.orEmpty().map { "https://image.tmdb.org/t/p/w1280$it" } +
-            info?.fanartStillUrls.orEmpty()).distinct()
-        val searchedFrames = if (verifiedProviderFrames.size < 3) {
-            SceneImageSearchClient.search(info?.originalTitle?.takeIf { it.isNotBlank() } ?: item.title, item.type, sceneSearchKey)
-        } else emptyList()
-        val sceneUrls = (verifiedProviderFrames + searchedFrames).distinct()
-        val (hero, posterFallback, stills) = coroutineScope {
-            val heroTask = async {
-                heroCandidates.firstNotNullOfOrNull { url ->
-                    downloadShareImage(url)?.let { bitmap ->
-                        if (hasUsablePicture(bitmap)) bitmap else { bitmap.recycle(); null }
-                    }
+        require(selectedSceneUris.size >= 3) {
+            "Selecione três capturas reais de cenas para gerar a indicação."
+        }
+        val (hero, posterFallback) = run {
+            val selectedHero = heroCandidates.firstNotNullOfOrNull { url ->
+                downloadShareImage(url)?.let { bitmap ->
+                    if (hasUsablePicture(bitmap)) bitmap else { bitmap.recycle(); null }
                 }
             }
-            val stillTasks = sceneUrls.map { url -> async {
-                downloadShareImage(url)?.let { bitmap ->
-                    if (hasUsablePicture(bitmap, 1.3f)) bitmap else { bitmap.recycle(); null }
-                }
-            } }
-            val selectedHero = heroTask.await()
             val poster = if (selectedHero == null) item.posterPath?.let {
                 downloadShareImage("https://image.tmdb.org/t/p/w780$it")
             } else null
-            Triple(selectedHero, poster, stillTasks.awaitAll().filterNotNull().take(3))
+            selectedHero to poster
         }
-        if (stills.size < 3) {
+        val stills = selectedSceneUris.take(3).mapNotNull { uri ->
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+            }.getOrNull()?.let { bitmap ->
+                if (hasUsablePicture(bitmap, 1.1f)) bitmap
+                else { bitmap.recycle(); null }
+            }
+        }
+        if (stills.size != 3) {
             stills.forEach { it.recycle() }
             hero?.recycle()
             posterFallback?.recycle()
-            throw IllegalStateException("Foram encontradas apenas ${stills.size} capturas válidas de cenas. O card não será gerado com miniaturas vazias ou artes promocionais. Configure uma chave Brave Search válida ou tente outro título.")
+            throw IllegalStateException("Uma ou mais imagens selecionadas não são capturas válidas. Escolha três imagens horizontais e tente novamente.")
         }
 
         val width = 1080
