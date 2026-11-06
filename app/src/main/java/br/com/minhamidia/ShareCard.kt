@@ -293,12 +293,12 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             posterFallback.recycle()
         }
         paint.shader = LinearGradient(0f, 0f, 0f, heroBottom,
-            intArrayOf(0xC9000000.toInt(), 0x16000000, 0xF5050309.toInt()),
+            intArrayOf(0x55000000, 0x16000000, 0xF5050309.toInt()),
             floatArrayOf(0f, .42f, 1f), Shader.TileMode.CLAMP)
         canvas.drawRect(0f, 0f, width.toFloat(), heroBottom, paint)
         paint.shader = null
         paint.shader = LinearGradient(0f, 0f, width.toFloat(), 0f,
-            intArrayOf(0xA9000000.toInt(), 0x00000000, 0x55200042),
+            intArrayOf(0x35000000, 0x00000000, 0x30200042),
             null, Shader.TileMode.CLAMP)
         canvas.drawRect(0f, 0f, width.toFloat(), heroBottom, paint)
         paint.shader = null
