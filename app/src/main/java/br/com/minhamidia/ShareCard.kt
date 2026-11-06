@@ -48,20 +48,41 @@ private fun decodeSampledShareImage(openStream: () -> InputStream?, maxWidth: In
     return openStream()?.use { BitmapFactory.decodeStream(it, null, options) }
 }
 
-// Copy a user-selected content URI once into the app cache before decoding.
- // Some document/cloud providers expose a one-shot or non-seekable stream; the
- // previous two-open decode could read bounds successfully and then fail decoding.
+// Read each selected URI once, then decode from seekable bytes.
+// This supports non-seekable document providers and HEIF/AVIF on supported Android versions.
 private fun decodeSelectedScene(context: Context, uri: Uri): Bitmap? {
-    val temp = File.createTempFile("cineverso_scene_", ".img", context.cacheDir)
-    return try {
-        val copied = context.contentResolver.openInputStream(uri)?.use { input ->
-            temp.outputStream().buffered().use { output -> input.copyTo(output) }
-        } ?: return null
-        if (copied <= 0L) return null
-        decodeSampledShareImage({ temp.inputStream() }, 720, 420)
-    } finally {
-        temp.delete()
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: return null
+    if (bytes.isEmpty()) return null
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+        var sample = 1
+        while (bounds.outWidth / sample > 1440 || bounds.outHeight / sample > 840) sample *= 2
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.let { return it }
     }
+
+    if (android.os.Build.VERSION.SDK_INT >= 28) {
+        return runCatching {
+            val source = android.graphics.ImageDecoder.createSource(java.nio.ByteBuffer.wrap(bytes))
+            android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                val width = info.size.width
+                val height = info.size.height
+                val scale = minOf(1f, 720f / width, 420f / height)
+                decoder.setTargetSize(
+                    (width * scale).toInt().coerceAtLeast(1),
+                    (height * scale).toInt().coerceAtLeast(1)
+                )
+                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        }.getOrNull()
+    }
+    return null
 }
 
 private fun downloadShareImage(url: String): Bitmap? = runCatching {
@@ -208,14 +229,28 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             } else null
             selectedHero to poster
         }
-        val stills = selectedSceneUris.take(3).mapNotNull { uri ->
-            runCatching { decodeSelectedScene(context, uri) }.getOrNull()
+        val sceneResults = selectedSceneUris.take(3).map { uri ->
+            runCatching { decodeSelectedScene(context, uri) }
         }
+        val stills = sceneResults.mapNotNull { it.getOrNull() }
         if (stills.size != 3) {
             stills.forEach { it.recycle() }
             hero?.recycle()
             posterFallback?.recycle()
-            throw IllegalStateException("Não foi possível ler uma das três imagens. Selecione os arquivos de imagem salvos no aparelho (JPG, PNG ou WEBP) e tente novamente.")
+            val failedIndex = sceneResults.indexOfFirst { it.isFailure }
+            val reason = sceneResults.getOrNull(failedIndex)?.exceptionOrNull()?.javaClass?.simpleName
+            throw IllegalStateException(
+                "Não consegui decodificar a captura " + (failedIndex + 1) + " (" +
+                    (reason ?: "formato não reconhecido") +
+                    "). Abra a imagem no aparelho e salve como JPG ou PNG antes de selecioná-la."
+            )
+        }
+        val invalidIndex = stills.indexOfFirst { !hasUsableScene(it) }
+        if (invalidIndex >= 0) {
+            stills.forEach { it.recycle() }
+            hero?.recycle()
+            posterFallback?.recycle()
+            throw IllegalStateException("A captura " + (invalidIndex + 1) + " tem resolução insuficiente. Escolha uma imagem maior.")
         }
 
         val width = 1080
