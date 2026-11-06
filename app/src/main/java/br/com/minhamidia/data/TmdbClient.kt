@@ -47,7 +47,8 @@ data class TmdbShareCardDetails(
     val fanartPosterUrl: String? = null,
     val fanartBannerUrl: String? = null,
     val fanartStillUrls: List<String> = emptyList(),
-    val localizedTitle: String = ""
+    val localizedTitle: String = "",
+    val originalTitle: String = ""
 )
 
 object TmdbClient {
@@ -223,20 +224,15 @@ object TmdbClient {
                 }.awaitAll().flatten().distinct().take(9)
             }
         }.getOrDefault(emptyList()) else emptyList()
-        // Movies use Fanart.tv's dedicated moviethumb frames in ShareCard.
-        // Do not repurpose TMDB backdrops as screenshot thumbnails.
-        // Movie backdrops are TMDB's scene-image gallery. Keep the full eligible
-        // gallery so the share card can select three distinct frames; never use posters,
-        // logos, banners, character art or promotional key art as scene thumbnails.
-        val movieSceneStills = if (type == "movie") backdropCandidates
-            .map { it.first }
-            .distinct()
-            .take(18) else emptyList()
-        val stillPaths = if (type == "tv") episodeStills else movieSceneStills
+        // Only actual episode stills are accepted from TMDB for series. Movie backdrops
+        // are not treated as verified screenshots; movie frames come from the dedicated
+        // image-search provider in ShareCard.
+        val stillPaths = if (type == "tv") episodeStills else emptyList()
         val fanart = runCatching { FanartClient.artwork(id, type) }.getOrNull()
         return TmdbShareCardDetails(
             leadActor, genres, backdropPath, stillPaths,
             localizedTitle = details.optString(if (type == "tv") "name" else "title").ifBlank { details.optString(if (type == "tv") "original_name" else "original_title") },
+            originalTitle = details.optString(if (type == "tv") "original_name" else "original_title").ifBlank { details.optString(if (type == "tv") "name" else "title") },
             fanartBackgroundUrl = fanart?.backgroundUrl,
             fanartLogoUrl = fanart?.logoUrl,
             fanartPosterUrl = fanart?.posterUrl,
