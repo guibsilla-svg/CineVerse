@@ -32,19 +32,23 @@ private fun hasUsablePicture(bitmap: Bitmap, minRatio: Float = 1.25f): Boolean {
     if (bitmap.width < 300 || bitmap.height < 160) return false
     val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
     if (ratio < minRatio || ratio > 2.5f) return false
-    val sample = IntArray(144)
-    bitmap.getPixels(sample, 0, 12, 0, 0, bitmap.width, bitmap.height)
     var sum = 0.0
     var sumSquares = 0.0
     var visible = 0
-    sample.forEach { pixel ->
+    var samples = 0
+    // Sample across the complete frame, not only its upper-left corner.
+    for (row in 0 until 12) for (column in 0 until 12) {
+        val px = (column * (bitmap.width - 1) / 11).coerceIn(0, bitmap.width - 1)
+        val py = (row * (bitmap.height - 1) / 11).coerceIn(0, bitmap.height - 1)
+        val pixel = bitmap.getPixel(px, py)
         val luminance = (Color.red(pixel) * 0.2126 + Color.green(pixel) * 0.7152 + Color.blue(pixel) * 0.0722)
         sum += luminance
         sumSquares += luminance * luminance
         if (luminance > 24.0) visible++
+        samples++
     }
-    val mean = sum / sample.size
-    val deviation = kotlin.math.sqrt((sumSquares / sample.size) - mean * mean)
+    val mean = sum / samples
+    val deviation = kotlin.math.sqrt((sumSquares / samples) - mean * mean)
     return mean > 12.0 && deviation > 8.0 && visible >= 8
 }
 
