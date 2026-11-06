@@ -51,6 +51,22 @@ data class TmdbShareCardDetails(
 )
 
 object TmdbClient {
+    // TMDB genre IDs are stable across languages. This local dictionary is a
+    // deterministic fallback whenever the API returns an untranslated genre.
+    private fun portugueseGenreName(id: Int, apiName: String): String {
+        val names = mapOf(
+            28 to "Ação", 12 to "Aventura", 16 to "Animação", 35 to "Comédia",
+            80 to "Crime", 99 to "Documentário", 18 to "Drama", 10751 to "Família",
+            14 to "Fantasia", 36 to "História", 27 to "Terror", 10402 to "Música",
+            9648 to "Mistério", 10749 to "Romance", 878 to "Ficção científica",
+            10770 to "Cinema para TV", 53 to "Suspense", 10752 to "Guerra",
+            37 to "Faroeste", 10759 to "Ação e aventura", 10762 to "Infantil",
+            10763 to "Notícias", 10764 to "Reality show", 10765 to "Ficção científica e fantasia",
+            10766 to "Novela", 10767 to "Talk show", 10768 to "Guerra e política"
+        )
+        return names[id] ?: apiName
+    }
+
     suspend fun search(query: String, credential: String): List<TmdbResult> =
         request("/search/multi", credential, mapOf(
             "query" to query,
@@ -165,8 +181,11 @@ object TmdbClient {
         val genresJson = details.optJSONArray("genres")
         val genres = buildList {
             if (genresJson != null) for (i in 0 until genresJson.length()) {
-                val name = genresJson.optJSONObject(i)?.optString("name").orEmpty()
-                if (name.isNotBlank()) add(name)
+                val genre = genresJson.optJSONObject(i) ?: continue
+                val id = genre.optInt("id", -1)
+                val apiName = genre.optString("name").trim()
+                val translated = portugueseGenreName(id, apiName)
+                if (translated.isNotBlank() && !contains(translated)) add(translated)
             }
         }
         val leadActor = credits.optJSONArray("cast")?.optJSONObject(0)?.optString("name").orEmpty()
@@ -206,7 +225,14 @@ object TmdbClient {
         }.getOrDefault(emptyList()) else emptyList()
         // Movies use Fanart.tv's dedicated moviethumb frames in ShareCard.
         // Do not repurpose TMDB backdrops as screenshot thumbnails.
-        val stillPaths = if (type == "tv") episodeStills else emptyList()
+        // Movie backdrops are TMDB's scene-image gallery. Keep the full eligible
+        // gallery so the share card can select three distinct frames; never use posters,
+        // logos, banners, character art or promotional key art as scene thumbnails.
+        val movieSceneStills = if (type == "movie") backdropCandidates
+            .map { it.first }
+            .distinct()
+            .take(18) else emptyList()
+        val stillPaths = if (type == "tv") episodeStills else movieSceneStills
         val fanart = runCatching { FanartClient.artwork(id, type) }.getOrNull()
         return TmdbShareCardDetails(
             leadActor, genres, backdropPath, stillPaths,
