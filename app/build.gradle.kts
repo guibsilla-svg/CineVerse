@@ -29,11 +29,12 @@ android {
     productFlavors {
         create("publicEdition") {
             dimension = "edition"
+            applicationIdSuffix = ".public"
             buildConfigField("boolean", "IS_OWNER_BUILD", "false")
         }
         create("owner") {
             dimension = "edition"
-            applicationIdSuffix = ".owner"
+            // Keep the original package ID so the existing private V1 install upgrades in place.
             buildConfigField("boolean", "IS_OWNER_BUILD", "true")
         }
     }
