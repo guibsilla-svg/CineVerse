@@ -10,6 +10,7 @@ android {
     compileSdk = 35
     defaultConfig {
         applicationId = "br.com.cineverse"
+        manifestPlaceholders["appLabel"] = "CineVerso"
         minSdk = 26
         targetSdk = 35
         versionCode = providers.gradleProperty("appVersionCode").orNull?.toInt() ?: 1
