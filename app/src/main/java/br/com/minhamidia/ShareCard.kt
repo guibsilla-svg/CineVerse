@@ -75,7 +75,10 @@ private fun drawRoundedImage(canvas: Canvas, image: Bitmap?, rect: RectF, radius
 }
 
 private fun drawCentered(canvas: Canvas, text: String, y: Float, paint: Paint, centerX: Float = 540f) {
-    canvas.drawText(text, centerX - paint.measureText(text) / 2f, y, paint)
+    // Paint.Align.CENTER expects the supplied X to be the center, not the left edge.
+    val x = if (paint.textAlign == Paint.Align.CENTER) centerX
+        else centerX - paint.measureText(text) / 2f
+    canvas.drawText(text, x, y, paint)
 }
 
 private fun drawStar(canvas: Canvas, cx: Float, cy: Float, outer: Float, inner: Float, paint: Paint) {
