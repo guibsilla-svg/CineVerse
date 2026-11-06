@@ -832,7 +832,7 @@ class MainActivity : ComponentActivity() {
                                                         Spacer(Modifier.width(10.dp))
                                                         Text("GERANDO CARD…", fontWeight = FontWeight.Bold)
                                                     }
-                                                } else Text("COMPARTILHAR RECOMENDAÇÃO", fontWeight = FontWeight.Bold)
+                                                } else Text("DICA DO CHEFE", fontWeight = FontWeight.Bold)
                                             }
                                             if (waitingForHeroSelection && pendingSceneItem?.id == selectedTitle.id) {
                                                 Spacer(Modifier.height(8.dp))
