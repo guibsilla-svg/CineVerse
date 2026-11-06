@@ -324,8 +324,8 @@ suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, c
                 val remainingMinutes = minutes % 60
                 when {
                     hours > 0 && remainingMinutes > 0 -> " • ${hours}h${remainingMinutes}"
-                    hours > 0 -> " • \${hours}h"
-                    else -> " • \${remainingMinutes}min"
+                    hours > 0 -> " • ${hours}h"
+                    else -> " • ${remainingMinutes}min"
                 }
             } else ""
             "FILME$duration"
