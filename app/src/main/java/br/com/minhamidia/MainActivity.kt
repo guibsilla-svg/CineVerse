@@ -781,7 +781,7 @@ class MainActivity : ComponentActivity() {
                                                                 }.getOrNull()?.takeIf { it.isNotBlank() } ?: selectedTitle.title
                                                                 val searchTerm = if (selectedTitle.type == "tv") "episode screenshots" else "movie scenes screenshots"
                                                                 val searchUrl = "https://www.google.com/search?tbm=isch&q=" +
-                                                                    Uri.encode("\\"$originalTitle\\" $searchTerm -poster -fanart -wallpaper -banner -logo")
+                                                                    Uri.encode("$originalTitle $searchTerm -poster -fanart -wallpaper -banner -logo")
                                                                 googleSceneSearch.launch(Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl)))
                                                             } catch (error: Exception) {
                                                                 Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
