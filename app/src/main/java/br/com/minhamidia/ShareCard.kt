@@ -545,7 +545,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             textSize = 43f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
-        val label = "Minha Indicação"
+        val label = "Dica do Chefe"
         val playWidth = 34f
         val gapToLabel = 22f
         val groupWidth = playWidth + gapToLabel + buttonTextPaint.measureText(label)
@@ -568,7 +568,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         paint.color = 0xFFF6F0FA.toInt()
         paint.textSize = 25f
         paint.typeface = Typeface.create("sans-serif", Typeface.ITALIC)
-        drawCentered(canvas, "Compartilhe essa dica incrível do CineVerso!", footerY, paint)
+        drawCentered(canvas, "Uma recomendação especial do CineVerso.", footerY, paint)
 
         // Cards ficam no cache privado do app, nunca na galeria. Mantém no máximo
         // três arquivos recentes e remove os antigos para evitar acúmulo no aparelho.
