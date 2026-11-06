@@ -185,21 +185,23 @@ object TmdbClient {
         val backdropPath = backdropCandidates.firstOrNull()?.first
         // For series, collect episode stills from multiple real seasons. Never fall back
         // to series backdrops, posters, banners or logos for the three scene screenshots.
-        val episodeStills = if (type == "tv") runCatching {
+        val episodeStills: List<String> = if (type == "tv") runCatching<List<String>> {
             val seasons = details.optJSONArray("seasons")
-            val seasonNumbers = seasons?.let { array ->
+            val seasonNumbers: List<Int> = seasons?.let { array ->
                 (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optInt("season_number") }
                     .filter { it > 0 }.take(4)
-            }.orEmpty()
+            } ?: emptyList()
             coroutineScope {
-                seasonNumbers.map { seasonNumber -> async {
-                    val episodes = requestObject("/tv/$id/season/$seasonNumber", credential, mapOf("language" to "pt-BR"))
-                        .optJSONArray("episodes")
-                    episodes?.let { array ->
-                        (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("still_path") }
-                            .filter { it.startsWith("/") }.distinct()
-                    }.orEmpty()
-                } }.awaitAll().flatten().distinct().take(9)
+                seasonNumbers.map { seasonNumber ->
+                    async<List<String>> {
+                        val episodes = requestObject("/tv/$id/season/$seasonNumber", credential, mapOf("language" to "pt-BR"))
+                            .optJSONArray("episodes")
+                        episodes?.let { array ->
+                            (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("still_path") }
+                                .filter { it.startsWith("/") }.distinct()
+                        } ?: emptyList()
+                    }
+                }.awaitAll().flatten().distinct().take(9)
             }
         }.getOrDefault(emptyList()) else emptyList()
         // Movies use Fanart.tv's dedicated moviethumb frames in ShareCard.
