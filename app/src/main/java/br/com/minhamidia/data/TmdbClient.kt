@@ -39,14 +39,14 @@ data class TmdbCastMember(val id: Int, val name: String, val character: String, 
 data class TmdbShareCardDetails(
     val leadActor: String,
     val genres: List<String>,
-    val localizedTitle: String = "",
     val backdropPath: String?,
     val stillPaths: List<String>,
     val fanartBackgroundUrl: String? = null,
     val fanartLogoUrl: String? = null,
     val fanartPosterUrl: String? = null,
     val fanartBannerUrl: String? = null,
-    val fanartStillUrls: List<String> = emptyList()
+    val fanartStillUrls: List<String> = emptyList(),
+    val localizedTitle: String = ""
 )
 
 object TmdbClient {
