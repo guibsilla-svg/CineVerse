@@ -806,10 +806,10 @@ class MainActivity : ComponentActivity() {
                                                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                                                     type = "image/png"
                                                                     putExtra(Intent.EXTRA_STREAM, imageUri)
-                                                                    clipData = android.content.ClipData.newUri(contentResolver, "Minha Indicação CineVerso", imageUri)
+                                                                    clipData = android.content.ClipData.newUri(contentResolver, "Recomendação CineVerso", imageUri)
                                                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                                 }
-                                                                startActivity(Intent.createChooser(shareIntent, "Compartilhar Minha Indicação"))
+                                                                startActivity(Intent.createChooser(shareIntent, "Compartilhar recomendação"))
                                                             } catch (error: Exception) {
                                                                 Toast.makeText(this@MainActivity, "Falha ao gerar a indicação: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
                                                             } finally {
@@ -828,7 +828,7 @@ class MainActivity : ComponentActivity() {
                                                         Spacer(Modifier.width(10.dp))
                                                         Text("GERANDO CARD…", fontWeight = FontWeight.Bold)
                                                     }
-                                                } else Text("MINHA INDICAÇÃO", fontWeight = FontWeight.Bold)
+                                                } else Text("RECOMENDAR", fontWeight = FontWeight.Bold)
                                             }
                                             Text("Card automático com o pôster, título, nota TMDB e sinopse. Não exige escolher ou salvar imagens.", color = Muted, fontSize = 11.sp)
                                             Spacer(Modifier.height(4.dp))
