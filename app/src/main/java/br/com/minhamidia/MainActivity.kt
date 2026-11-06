@@ -236,7 +236,7 @@ class MainActivity : ComponentActivity() {
                             val assets = v1Release?.optJSONArray("assets")
                             val apk = assets?.let { array ->
                                 (0 until array.length()).map { array.getJSONObject(it) }
-                                    .firstOrNull { it.optString("name") == (if (BuildConfig.IS_OWNER_BUILD) "cineverso-owner.apk" else "cineverse.apk") }
+                                    .firstOrNull { it.optString("name") == "cineverse.apk" }
                                     ?.optString("browser_download_url")
                             }
                             if (tag.isNotBlank() && apk?.startsWith("https://") == true &&
@@ -796,26 +796,22 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             Spacer(Modifier.height(12.dp))
-                                            if (BuildConfig.IS_OWNER_BUILD) {
                                             OutlinedButton(
                                                 onClick = {
                                                     if (!sharingRecommendation) {
                                                         sharingRecommendation = true
-                                                        Toast.makeText(this@MainActivity, "Preparando seu card…", Toast.LENGTH_SHORT).show()
                                                         lifecycleScope.launch {
                                                             try {
-                                                                pendingSceneItem = selectedTitle
-                                                                pendingHeroUri = null
-                                                                val originalTitle = runCatching {
-                                                                    TmdbClient.shareCardDetails(selectedTitle.id, selectedTitle.type, apiKey).originalTitle
-                                                                }.getOrNull()?.takeIf { it.isNotBlank() } ?: selectedTitle.title
-                                                                pendingOriginalTitle = originalTitle
-                                                                val bannerSearchUrl = "https://www.google.com/search?tbm=isch&q=" +
-                                                                    Uri.encode("$originalTitle movie backdrop still -poster -logo -collage")
-                                                                waitingForHeroSelection = true
-                                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(bannerSearchUrl)))
+                                                                val imageUri = createSimpleCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
+                                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                                    type = "image/png"
+                                                                    putExtra(Intent.EXTRA_STREAM, imageUri)
+                                                                    clipData = android.content.ClipData.newUri(contentResolver, "Minha Indicação CineVerso", imageUri)
+                                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                                }
+                                                                startActivity(Intent.createChooser(shareIntent, "Compartilhar Minha Indicação"))
                                                             } catch (error: Exception) {
-                                                                Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
+                                                                Toast.makeText(this@MainActivity, "Falha ao gerar a indicação: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
                                                             } finally {
                                                                 sharingRecommendation = false
                                                             }
@@ -832,62 +828,9 @@ class MainActivity : ComponentActivity() {
                                                         Spacer(Modifier.width(10.dp))
                                                         Text("GERANDO CARD…", fontWeight = FontWeight.Bold)
                                                     }
-                                                } else Text("DICA DO CHEFE", fontWeight = FontWeight.Bold)
+                                                } else Text("MINHA INDICAÇÃO", fontWeight = FontWeight.Bold)
                                             }
-                                            if (waitingForHeroSelection && pendingSceneItem?.id == selectedTitle.id) {
-                                                Spacer(Modifier.height(8.dp))
-                                                Button(
-                                                    onClick = { heroImagePicker.launch(arrayOf("image/*")) },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
-                                                ) {
-                                                    Text("SELECIONAR BANNER PRINCIPAL", color = Color.White, fontWeight = FontWeight.Bold)
-                                                }
-                                                Text("Escolha no Google Imagens um banner horizontal da produção. A imagem será usada somente na geração do card, sem ser salva na galeria.", color = Muted, fontSize = 11.sp)
-                                            }
-                                            if (waitingForSceneSelection && pendingSceneItem?.id == selectedTitle.id) {
-                                                Spacer(Modifier.height(8.dp))
-                                                Button(
-                                                    onClick = { sceneImagePicker.launch(arrayOf("image/*")) },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
-                                                ) {
-                                                    Text("JÁ ESCOLHI AS 3 CENAS — GERAR CARD", color = Color.White, fontWeight = FontWeight.Bold)
-                                                }
-                                                Text("Depois de selecionar o banner, escolha três capturas reais de cenas no Google Imagens. Volte aqui e selecione as três imagens para gerar o card.", color = Muted, fontSize = 11.sp)
-                                            }
-                                            }
-                                            if (!BuildConfig.IS_OWNER_BUILD) {
-                                                OutlinedButton(
-                                                    onClick = {
-                                                        if (!sharingRecommendation) {
-                                                            sharingRecommendation = true
-                                                            lifecycleScope.launch {
-                                                                try {
-                                                                    val imageUri = createSimpleCineVersoShareCard(this@MainActivity, selectedTitle, apiKey)
-                                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                                        type = "image/png"
-                                                                        putExtra(Intent.EXTRA_STREAM, imageUri)
-                                                                        clipData = android.content.ClipData.newUri(contentResolver, "Minha Indicação CineVerso", imageUri)
-                                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                                    }
-                                                                    startActivity(Intent.createChooser(shareIntent, "Compartilhar Minha Indicação"))
-                                                                } catch (error: Exception) {
-                                                                    Toast.makeText(this@MainActivity, "Falha ao gerar a indicação: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
-                                                                } finally {
-                                                                    sharingRecommendation = false
-                                                                }
-                                                            }
-                                                        }
-                                                    },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    enabled = !sharingRecommendation,
-                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC29AFF))
-                                                ) {
-                                                    Text("MINHA INDICAÇÃO", fontWeight = FontWeight.Bold)
-                                                }
-                                                Text("Card automático com banner, título, nota TMDB e sinopse. Não exige escolher ou salvar imagens.", color = Muted, fontSize = 11.sp)
-                                            }
+                                            Text("Card automático com o pôster, título, nota TMDB e sinopse. Não exige escolher ou salvar imagens.", color = Muted, fontSize = 11.sp)
                                             Spacer(Modifier.height(4.dp))
                                             Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                             when {
