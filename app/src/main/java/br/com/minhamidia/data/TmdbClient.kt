@@ -36,7 +36,17 @@ data class TmdbResult(
 data class TmdbTrailer(val key: String, val name: String, val language: String)
 data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
-data class TmdbShareCardDetails(val leadActor: String, val genres: List<String>, val backdropPath: String?, val stillPaths: List<String>)
+data class TmdbShareCardDetails(
+    val leadActor: String,
+    val genres: List<String>,
+    val backdropPath: String?,
+    val stillPaths: List<String>,
+    val fanartBackgroundUrl: String? = null,
+    val fanartLogoUrl: String? = null,
+    val fanartPosterUrl: String? = null,
+    val fanartBannerUrl: String? = null,
+    val fanartStillUrls: List<String> = emptyList()
+)
 
 object TmdbClient {
     suspend fun search(query: String, credential: String): List<TmdbResult> =
@@ -171,7 +181,15 @@ object TmdbClient {
                 .take(3)
                 .toList()
         }.orEmpty()
-        return TmdbShareCardDetails(leadActor, genres, backdropPath, stillPaths)
+        val fanart = runCatching { FanartClient.artwork(id, type) }.getOrNull()
+        return TmdbShareCardDetails(
+            leadActor, genres, backdropPath, stillPaths,
+            fanartBackgroundUrl = fanart?.backgroundUrl,
+            fanartLogoUrl = fanart?.logoUrl,
+            fanartPosterUrl = fanart?.posterUrl,
+            fanartBannerUrl = fanart?.bannerUrl,
+            fanartStillUrls = fanart?.stillUrls.orEmpty()
+        )
     }
 
     suspend fun cast(id: Int, type: String, credential: String): List<TmdbCastMember> {
