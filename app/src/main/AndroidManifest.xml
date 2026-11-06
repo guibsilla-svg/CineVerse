@@ -5,7 +5,7 @@
     <application android:allowBackup="true" android:label="CineVerso" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
         <provider
             android:name="br.com.minhamidia.CineVersoFileProvider"
-            android:authorities="br.com.cineverse.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
