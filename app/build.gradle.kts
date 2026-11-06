@@ -25,6 +25,18 @@ android {
             keyPassword = System.getenv("CINEVERSE_KEY_PASSWORD") ?: ""
         }
     }
+    flavorDimensions += "edition"
+    productFlavors {
+        create("publicEdition") {
+            dimension = "edition"
+            buildConfigField("boolean", "IS_OWNER_BUILD", "false")
+        }
+        create("owner") {
+            dimension = "edition"
+            applicationIdSuffix = ".owner"
+            buildConfigField("boolean", "IS_OWNER_BUILD", "true")
+        }
+    }
     buildTypes {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
