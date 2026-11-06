@@ -50,7 +50,8 @@ data class TmdbShareCardDetails(
     val localizedTitle: String = "",
     val originalTitle: String = "",
     val posterPath: String? = null,
-    val seasonsCount: Int = 0
+    val seasonsCount: Int = 0,
+    val runtimeMinutes: Int = 0
 )
 
 object TmdbClient {
@@ -251,6 +252,7 @@ object TmdbClient {
                     }
                 } ?: 0
             } else 0,
+            runtimeMinutes = if (type == "movie") details.optInt("runtime", 0) else 0,
             fanartBackgroundUrl = fanart?.backgroundUrl,
             fanartLogoUrl = fanart?.logoUrl,
             fanartPosterUrl = fanart?.posterUrl,
