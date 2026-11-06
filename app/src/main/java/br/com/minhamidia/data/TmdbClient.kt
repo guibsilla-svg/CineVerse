@@ -48,7 +48,8 @@ data class TmdbShareCardDetails(
     val fanartBannerUrl: String? = null,
     val fanartStillUrls: List<String> = emptyList(),
     val localizedTitle: String = "",
-    val originalTitle: String = ""
+    val originalTitle: String = "",
+    val posterPath: String? = null
 )
 
 object TmdbClient {
@@ -241,6 +242,7 @@ object TmdbClient {
             leadActor, genres, backdropPath, stillPaths,
             localizedTitle = details.optString(if (type == "tv") "name" else "title").ifBlank { details.optString(if (type == "tv") "original_name" else "original_title") },
             originalTitle = details.optString(if (type == "tv") "original_name" else "original_title").ifBlank { details.optString(if (type == "tv") "name" else "title") },
+            posterPath = details.optString("poster_path").takeIf { it.startsWith("/") },
             fanartBackgroundUrl = fanart?.backgroundUrl,
             fanartLogoUrl = fanart?.logoUrl,
             fanartPosterUrl = fanart?.posterUrl,
