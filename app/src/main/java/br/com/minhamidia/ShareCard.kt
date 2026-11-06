@@ -1,11 +1,11 @@
 package br.com.minhamidia
 
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.*
 import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.InputStream
 import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbResult
 import kotlinx.coroutines.Dispatchers
@@ -15,13 +15,41 @@ import java.net.URL
 import java.util.Locale
 import kotlin.math.max
 
+private fun openShareImageStream(url: String): InputStream? {
+    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 7000
+        readTimeout = 9000
+        instanceFollowRedirects = true
+    }
+    return runCatching {
+        object : java.io.FilterInputStream(connection.inputStream) {
+            override fun close() {
+                try { super.close() } finally { connection.disconnect() }
+            }
+        }
+    }.getOrElse {
+        connection.disconnect()
+        null
+    }
+}
+
+private fun decodeSampledShareImage(openStream: () -> InputStream?, maxWidth: Int, maxHeight: Int): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    openStream()?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / sample > maxWidth * 2 || bounds.outHeight / sample > maxHeight * 2) {
+        sample *= 2
+    }
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sample
+        inPreferredConfig = Bitmap.Config.RGB_565
+    }
+    return openStream()?.use { BitmapFactory.decodeStream(it, null, options) }
+}
+
 private fun downloadShareImage(url: String): Bitmap? = runCatching {
-    val connection = URL(url).openConnection() as HttpURLConnection
-    connection.connectTimeout = 7000
-    connection.readTimeout = 9000
-    connection.instanceFollowRedirects = true
-    try { connection.inputStream.use { BitmapFactory.decodeStream(it) } }
-    finally { connection.disconnect() }
+    decodeSampledShareImage({ openShareImageStream(url) }, 1440, 960)
 }.getOrNull()
 
 
@@ -175,7 +203,11 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         }
         val stills = selectedSceneUris.take(3).mapNotNull { uri ->
             runCatching {
-                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                decodeSampledShareImage(
+                    { context.contentResolver.openInputStream(uri) },
+                    720,
+                    420
+                )
             }.getOrNull()?.let { bitmap ->
                 if (hasUsablePicture(bitmap, 1.1f)) bitmap
                 else { bitmap.recycle(); null }
@@ -211,7 +243,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val dividerY = buttonBottom + 75f
         val height = (buttonBottom + 190f).toInt()
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
         val canvas = Canvas(bitmap)
         paint.shader = LinearGradient(0f, 0f, width.toFloat(), height.toFloat(),
             intArrayOf(0xFF050309.toInt(), 0xFF170B25.toInt(), 0xFF050309.toInt()),
@@ -385,33 +417,24 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         paint.typeface = Typeface.create("sans-serif", Typeface.ITALIC)
         drawCentered(canvas, "Compartilhe essa dica incrível do CineVerso!", footerY, paint)
 
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "cineverso_${item.type}_${item.id}.png")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CineVerso")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
-        }
-        val imageUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-            ?: run { bitmap.recycle(); throw IllegalStateException("Não foi possível criar a imagem para compartilhamento") }
+        // Cards ficam no cache privado do app, nunca na galeria. Mantém no máximo
+        // três arquivos recentes e remove os antigos para evitar acúmulo no aparelho.
+        val shareDir = File(context.cacheDir, "shared_recommendations").apply { mkdirs() }
+        val oldCards = shareDir.listFiles()?.filter { it.isFile }
+            ?.sortedByDescending { it.lastModified() }.orEmpty()
+        oldCards.drop(2).forEach { it.delete() }
+        val outputFile = File(shareDir, "cineverso_${item.type}_${item.id}_${System.currentTimeMillis()}.png")
         try {
-            val stream = context.contentResolver.openOutputStream(imageUri)
-                ?: throw IllegalStateException("Não foi possível abrir a imagem gerada")
-            stream.use {
-                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            outputFile.outputStream().buffered().use { stream ->
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
                     throw IllegalStateException("Não foi possível salvar a imagem gerada")
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.contentResolver.update(imageUri, ContentValues().apply {
-                    put(MediaStore.Images.Media.IS_PENDING, 0)
-                }, null, null)
+                }
             }
             bitmap.recycle()
-            imageUri
+            FileProvider.getUriForFile(context, "br.com.cineverse.fileprovider", outputFile)
         } catch (error: Exception) {
-            context.contentResolver.delete(imageUri, null, null)
             bitmap.recycle()
+            outputFile.delete()
             throw error
         }
     }
