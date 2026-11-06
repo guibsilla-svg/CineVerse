@@ -27,6 +27,35 @@ private fun downloadShareImage(url: String): Bitmap? = runCatching {
     finally { connection.disconnect() }
 }.getOrNull()
 
+
+private fun hasUsablePicture(bitmap: Bitmap, minRatio: Float = 1.25f): Boolean {
+    if (bitmap.width < 300 || bitmap.height < 160) return false
+    val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+    if (ratio < minRatio || ratio > 2.5f) return false
+    val sample = IntArray(144)
+    bitmap.getPixels(sample, 0, 12, 0, 0, bitmap.width, bitmap.height)
+    var sum = 0.0
+    var sumSquares = 0.0
+    var visible = 0
+    sample.forEach { pixel ->
+        val luminance = (Color.red(pixel) * 0.2126 + Color.green(pixel) * 0.7152 + Color.blue(pixel) * 0.0722)
+        sum += luminance
+        sumSquares += luminance * luminance
+        if (luminance > 24.0) visible++
+    }
+    val mean = sum / sample.size
+    val deviation = kotlin.math.sqrt((sumSquares / sample.size) - mean * mean)
+    return mean > 12.0 && deviation > 8.0 && visible >= 8
+}
+
+private fun drawContain(canvas: Canvas, image: Bitmap, target: RectF, paint: Paint) {
+    val scale = minOf(target.width() / image.width, target.height() / image.height)
+    val w = image.width * scale
+    val h = image.height * scale
+    canvas.drawBitmap(image, null, RectF(target.centerX() - w / 2f, target.centerY() - h / 2f,
+        target.centerX() + w / 2f, target.centerY() + h / 2f), paint)
+}
+
 private fun wrapShareText(text: String, paint: Paint, maxWidth: Float): List<String> {
     val result = mutableListOf<String>()
     var line = ""
@@ -94,75 +123,61 @@ private fun drawStar(canvas: Canvas, cx: Float, cy: Float, outer: Float, inner: 
     canvas.drawPath(path, paint)
 }
 
-private fun drawFilmStrip(canvas: Canvas, left: Float, top: Float, width: Float, height: Float, paint: Paint) {
-    // Continuous curved celluloid ribbon: outer rails, dark image channel and
-    // paired sprocket perforations rotated to follow the ribbon's direction.
-    val path = Path().apply {
-        moveTo(left, top + height * .52f)
-        cubicTo(left + width * .18f, top - height * .12f,
-            left + width * .30f, top + height * 1.12f,
-            left + width * .50f, top + height * .52f)
-        cubicTo(left + width * .70f, top - height * .08f,
-            left + width * .82f, top + height * 1.12f,
-            left + width, top + height * .48f)
-    }
+private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
+    // Simple clapperboard-inspired divider built only from stable Canvas primitives.
+    val centerX = 540f
+    val iconWidth = 92f
+    val iconHeight = 48f
+    val left = centerX - iconWidth / 2f
+    val right = centerX + iconWidth / 2f
+    val top = centerY - iconHeight / 2f
+    val bottom = centerY + iconHeight / 2f
     paint.shader = null
     paint.style = Paint.Style.STROKE
-    paint.strokeCap = Paint.Cap.ROUND
-    paint.strokeJoin = Paint.Join.ROUND
-    paint.color = 0xFFB45AE5.toInt()
-    paint.strokeWidth = 66f
-    canvas.drawPath(path, paint)
-    paint.color = 0xFF21102D.toInt()
-    paint.strokeWidth = 58f
-    canvas.drawPath(path, paint)
-    paint.color = 0xFF09060D.toInt()
-    paint.strokeWidth = 34f
-    canvas.drawPath(path, paint)
-
-    val measure = PathMeasure(path, false)
-    val length = measure.length
-    val position = FloatArray(2)
-    val tangent = FloatArray(2)
-    val holePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFD9A0F4.toInt() }
-    var distance = 22f
-    while (distance < length - 12f) {
-        if (measure.getPosTan(distance, position, tangent)) {
-            val angle = Math.toDegrees(kotlin.math.atan2(tangent[1], tangent[0]).toDouble()).toFloat()
-            val normalX = -tangent[1]
-            val normalY = tangent[0]
-            for (side in listOf(-1f, 1f)) {
-                val cx = position[0] + normalX * 22f * side
-                val cy = position[1] + normalY * 22f * side
-                canvas.save()
-                canvas.rotate(angle, cx, cy)
-                canvas.drawRoundRect(RectF(cx - 8f, cy - 4.5f, cx + 8f, cy + 4.5f), 2.5f, 2.5f, holePaint)
-                canvas.restore()
-            }
-        }
-        distance += 39f
+    paint.strokeWidth = 3.5f
+    paint.color = 0xFFB96BEA.toInt()
+    canvas.drawLine(76f, centerY, left - 28f, centerY, paint)
+    canvas.drawLine(right + 28f, centerY, 1004f, centerY, paint)
+    canvas.drawRoundRect(RectF(left, top + 8f, right, bottom), 8f, 8f, paint)
+    canvas.drawRoundRect(RectF(left, top - 5f, right, top + 13f), 5f, 5f, paint)
+    paint.strokeWidth = 4f
+    for (index in 0..3) {
+        val x = left + 15f + index * 19f
+        canvas.drawLine(x, top - 3f, x + 9f, top + 11f, paint)
     }
     paint.style = Paint.Style.FILL
-    paint.strokeCap = Paint.Cap.BUTT
 }
 
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
-        val heroUrl = info?.fanartBackgroundUrl ?: info?.fanartBannerUrl
-        val heroPath = info?.backdropPath ?: item.posterPath
-        // The three thumbnails deliberately use TMDB image backdrops only (scene frames),
-        // never Fanart posters, banners, logos or promotional key art.
-        // Only dedicated scene-thumbnail sources are eligible here.
-        // Fanart.tv movie thumbs are actual film-frame thumbnails; never use backdrops/key art.
-        val sceneUrls = info?.fanartStillUrls.orEmpty().take(3)
-        val (hero, stills) = coroutineScope {
+        // Test every landscape hero source and reject blank/near-black artwork.
+        // Avoid portrait posters as a cropped hero: they are only a contained fallback.
+        val heroCandidates = listOfNotNull(
+            info?.fanartBackgroundUrl,
+            info?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" },
+            info?.fanartBannerUrl
+        ).distinct()
+        val sceneUrls = (info?.stillPaths.orEmpty().map { "https://image.tmdb.org/t/p/w1280$it" } +
+            info?.fanartStillUrls.orEmpty()).distinct()
+        val (hero, posterFallback, stills) = coroutineScope {
             val heroTask = async {
-                heroUrl?.let { downloadShareImage(it) }
-                    ?: heroPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280$it") }
+                heroCandidates.firstNotNullOfOrNull { url ->
+                    downloadShareImage(url)?.let { bitmap ->
+                        if (hasUsablePicture(bitmap)) bitmap else { bitmap.recycle(); null }
+                    }
+                }
             }
-            val stillTasks = sceneUrls.map { url -> async { downloadShareImage(url) } }
-            heroTask.await() to stillTasks.awaitAll().filterNotNull()
+            val stillTasks = sceneUrls.map { url -> async {
+                downloadShareImage(url)?.let { bitmap ->
+                    if (hasUsablePicture(bitmap, 1.3f)) bitmap else { bitmap.recycle(); null }
+                }
+            } }
+            val selectedHero = heroTask.await()
+            val poster = if (selectedHero == null) item.posterPath?.let {
+                downloadShareImage("https://image.tmdb.org/t/p/w780$it")
+            } else null
+            Triple(selectedHero, poster, stillTasks.awaitAll().filterNotNull().take(3))
         }
 
         val width = 1080
@@ -185,7 +200,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val stillHeight = 166f
         val buttonTop = stillTop + stillHeight + 48f
         val buttonBottom = buttonTop + 106f
-        val stripTop = buttonBottom + 10f
+        val dividerY = buttonBottom + 75f
         val height = (buttonBottom + 190f).toInt()
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -200,6 +215,9 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         if (hero != null) {
             drawCrop(canvas, hero, RectF(0f, 0f, width.toFloat(), heroBottom), paint)
             hero.recycle()
+        } else if (posterFallback != null) {
+            drawContain(canvas, posterFallback, RectF(250f, 35f, 830f, heroBottom - 20f), paint)
+            posterFallback.recycle()
         }
         paint.shader = LinearGradient(0f, 0f, 0f, heroBottom,
             intArrayOf(0xC9000000.toInt(), 0x16000000, 0xF5050309.toInt()),
@@ -311,9 +329,8 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
                 RectF(left, stillTop, left + stillWidth, stillTop + stillHeight), 18f, paint)
         }
 
-        // Film-strip decoration is drawn behind and below the CTA, not as dots/dashes.
-        drawFilmStrip(canvas, -12f, stripTop, 330f, 105f, paint)
-        drawFilmStrip(canvas, 760f, stripTop, 330f, 105f, paint)
+        // Clean, reliable clapperboard divider replaces the fragile curved film reel.
+        drawCinemaDivider(canvas, dividerY, paint)
 
         // Precisely centered play icon + label as one measured group.
         val button = RectF(190f, buttonTop, 890f, buttonBottom)
