@@ -113,38 +113,51 @@ private fun drawFilmStrip(canvas: Canvas, left: Float, top: Float, width: Float,
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
-        val fanartHeroUrl = info?.fanartBackgroundUrl ?: info?.fanartBannerUrl
+        val heroUrl = info?.fanartBackgroundUrl ?: info?.fanartBannerUrl
         val heroPath = info?.backdropPath ?: item.posterPath
-        val imagePaths = info?.stillPaths.orEmpty()
-        val stillUrls = (info?.fanartStillUrls.orEmpty() +
-            imagePaths.map { "https://image.tmdb.org/t/p/w780$it" }).distinct().take(3)
-        val (hero, stills, fanartLogo) = coroutineScope {
+        // The three thumbnails deliberately use TMDB image backdrops only (scene frames),
+        // never Fanart posters, banners, logos or promotional key art.
+        val sceneUrls = info?.stillPaths.orEmpty().take(3).map { "https://image.tmdb.org/t/p/w780$it" }
+        val (hero, stills) = coroutineScope {
             val heroTask = async {
-                fanartHeroUrl?.let { downloadShareImage(it) }
+                heroUrl?.let { downloadShareImage(it) }
                     ?: heroPath?.let { downloadShareImage("https://image.tmdb.org/t/p/w1280$it") }
-                    ?: info?.fanartPosterUrl?.let { downloadShareImage(it) }
             }
-            val stillTasks = stillUrls.map { url -> async { downloadShareImage(url) } }
-            val logoTask = async { info?.fanartLogoUrl?.let { downloadShareImage(it) } }
-            Triple(heroTask.await(), stillTasks.awaitAll().filterNotNull(), logoTask.await())
+            val stillTasks = sceneUrls.map { url -> async { downloadShareImage(url) } }
+            heroTask.await() to stillTasks.awaitAll().filterNotNull()
         }
 
-        // Portrait canvas follows the proportions and visual hierarchy of the supplied reference.
         val width = 1080
-        val height = 1350
         val margin = 46f
         val contentWidth = width - margin * 2
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        val synopsis = item.overview.ifBlank { "Uma história que merece entrar na sua lista." }
+        val synopsisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFF0EAF4.toInt()
+            textSize = 29f
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            textAlign = Paint.Align.CENTER
+        }
+        // Keep the complete synopsis: the canvas grows vertically when more lines are needed.
+        val synopsisLines = wrapShareText(synopsis, synopsisPaint, contentWidth - 42f)
+        val synopsisTop = 850f
+        val synopsisLineHeight = 39f
+        val synopsisBottom = synopsisTop + synopsisLines.size * synopsisLineHeight
+        val stillTop = maxOf(1000f, synopsisBottom + 45f)
+        val stillHeight = 166f
+        val buttonTop = stillTop + stillHeight + 48f
+        val buttonBottom = buttonTop + 106f
+        val stripTop = buttonBottom + 10f
+        val height = (buttonBottom + 190f).toInt()
+
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
         paint.shader = LinearGradient(0f, 0f, width.toFloat(), height.toFloat(),
             intArrayOf(0xFF050309.toInt(), 0xFF170B25.toInt(), 0xFF050309.toInt()),
             null, Shader.TileMode.CLAMP)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         paint.shader = null
 
-        // Cinematic hero artwork, with a deep fade into the information area.
         val heroBottom = 720f
         if (hero != null) {
             drawCrop(canvas, hero, RectF(0f, 0f, width.toFloat(), heroBottom), paint)
@@ -161,7 +174,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         canvas.drawRect(0f, 0f, width.toFloat(), heroBottom, paint)
         paint.shader = null
 
-        // CineVerso brand block in the upper-left corner.
+        // Brand only: the old slogan line has been removed.
         val brand = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
         if (brand != null) {
             val scale = minOf(390f / brand.width, 92f / brand.height)
@@ -175,60 +188,30 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
             canvas.drawText("CineVerso", 58f, 92f, paint)
         }
-        paint.color = 0xFFF3EAFB.toInt()
-        paint.textSize = 24f
-        paint.typeface = Typeface.create("sans-serif", Typeface.ITALIC)
-        canvas.drawText("Descubra. Assista. Compartilhe.", 116f, 139f, paint)
         paint.color = 0xFF9D25F5.toInt()
         paint.strokeWidth = 4f
-        canvas.drawLine(70f, 170f, 455f, 170f, paint)
+        canvas.drawLine(70f, 145f, 455f, 145f, paint)
 
-        // Lead performer credit.
-        val actor = info?.leadActor.orEmpty().uppercase(Locale("pt", "BR"))
-        if (actor.isNotBlank()) {
-            paint.color = 0xFFF8F4FB.toInt()
-            paint.textSize = 28f
-            paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            paint.textAlign = Paint.Align.CENTER
-            paint.letterSpacing = .28f
-            drawCentered(canvas, actor, 500f, paint)
-            paint.letterSpacing = 0f
-            paint.textAlign = Paint.Align.LEFT
+        // Brazilian Portuguese title is rendered as text instead of relying on
+        // language-dependent Fanart logos, which are often supplied only in English.
+        val title = (info?.localizedTitle?.takeIf { it.isNotBlank() } ?: item.title)
+            .uppercase(Locale("pt", "BR"))
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFF302B.toInt()
+            textSize = if (title.length > 20) 88f else 104f
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)
+            textAlign = Paint.Align.CENTER
+            setShadowLayer(6f, 2f, 4f, 0xD0000000.toInt())
         }
-
-        // Dramatic title treatment: use the transparent Fanart logo when available;
-        // otherwise render a large two-tone title in the same visual zone.
-        if (fanartLogo != null) {
-            val scale = minOf(970f / fanartLogo.width, 190f / fanartLogo.height)
-            val w = fanartLogo.width * scale
-            val h = fanartLogo.height * scale
-            canvas.drawBitmap(fanartLogo, null,
-                RectF((width - w) / 2f, 530f - h / 2f, (width + w) / 2f, 530f + h / 2f), paint)
-            fanartLogo.recycle()
-        } else {
-            val title = item.title.uppercase(Locale("pt", "BR"))
-            val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = 0xFFFF302B.toInt()
-                textSize = if (title.length > 19) 91f else 108f
-                typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)
-                textAlign = Paint.Align.CENTER
-                setShadowLayer(5f, 2f, 4f, 0xB0000000.toInt())
-            }
-            val lines = wrapShareText(title, titlePaint, 990f).take(2)
-            var y = if (lines.size == 1) 600f else 555f
-            lines.forEach { line ->
-                drawCentered(canvas, line, y, titlePaint)
-                y += 91f
-            }
-            titlePaint.clearShadowLayer()
-            titlePaint.color = 0xFFF7F3F8.toInt()
-            titlePaint.textSize = 35f
-            titlePaint.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)
-            titlePaint.textAlign = Paint.Align.LEFT
-            canvas.drawText(" ", 0f, 0f, titlePaint)
+        val titleLines = wrapShareText(title, titlePaint, 990f).take(2)
+        var titleY = if (titleLines.size == 1) 610f else 535f
+        titleLines.forEach { line ->
+            drawCentered(canvas, line, titleY, titlePaint)
+            titleY += 88f
         }
+        titlePaint.clearShadowLayer()
 
-        // Metadata row with separate visual markers.
+        // Metadata row with individually aligned genre, TMDB score and year.
         val genre = info?.genres.orEmpty().take(2).joinToString("  •  ").ifBlank { "Cinema" }
         val rating = if (item.tmdbVoteAverage > 0.0)
             String.format(Locale("pt", "BR"), "%.1f/10", item.tmdbVoteAverage) else "—/10"
@@ -240,67 +223,59 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         }
         val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = 30f
+            textSize = 28f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
-        val group1 = genre
-        val group2 = rating
-        val group3 = year
-        val total = metaPaint.measureText(group1) + 55f + metaPaint.measureText(group2) + 55f + metaPaint.measureText(group3) + 78f
-        var x = (width - total) / 2f
-        // Clapper icon.
+        val metaWidth = metaPaint.measureText(genre) + metaPaint.measureText(rating) +
+            metaPaint.measureText(year) + 150f
+        metaPaint.textSize = if (metaWidth > 950f) 23f else 28f
+        val totalWidth = metaPaint.measureText(genre) + metaPaint.measureText(rating) +
+            metaPaint.measureText(year) + 150f
+        var x = (width - totalWidth) / 2f
         paint.color = 0xFFD58BFF.toInt()
         canvas.drawRoundRect(RectF(x, metaY - 27f, x + 32f, metaY + 5f), 5f, 5f, paint)
         canvas.drawRect(x + 1f, metaY - 37f, x + 32f, metaY - 28f, paint)
         x += 43f
-        canvas.drawText(group1, x, metaY, metaPaint)
-        x += metaPaint.measureText(group1) + 27f
+        canvas.drawText(genre, x, metaY, metaPaint)
+        x += metaPaint.measureText(genre) + 20f
         canvas.drawLine(x, metaY - 30f, x, metaY + 12f, separatorPaint)
-        x += 22f
+        x += 20f
         drawStar(canvas, x + 13f, metaY - 10f, 17f, 8f,
             Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFC928.toInt() })
-        x += 37f
-        canvas.drawText(group2, x, metaY, metaPaint)
-        x += metaPaint.measureText(group2) + 27f
+        x += 36f
+        canvas.drawText(rating, x, metaY, metaPaint)
+        x += metaPaint.measureText(rating) + 20f
         canvas.drawLine(x, metaY - 30f, x, metaY + 12f, separatorPaint)
-        x += 22f
-        // Calendar icon.
+        x += 20f
         paint.color = 0xFFD58BFF.toInt()
         canvas.drawRoundRect(RectF(x, metaY - 29f, x + 31f, metaY + 3f), 5f, 5f, paint)
         paint.color = 0xFF38164D.toInt()
         canvas.drawRect(x + 4f, metaY - 17f, x + 27f, metaY - 13f, paint)
         x += 42f
-        canvas.drawText(group3, x, metaY, metaPaint)
+        canvas.drawText(year, x, metaY, metaPaint)
 
-        // Synopsis centered beneath the metadata.
-        val synopsis = item.overview.ifBlank { "Uma história que merece entrar na sua lista." }
-        val synopsisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFF0EAF4.toInt()
-            textSize = 29f
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            textAlign = Paint.Align.CENTER
-        }
-        val synopsisLines = wrapShareText(synopsis, synopsisPaint, contentWidth - 38f).take(4)
-        var synopsisY = 850f
-        synopsisLines.forEach { line ->
-            drawCentered(canvas, line, synopsisY, synopsisPaint)
-            synopsisY += 38f
+        // Fully centered, dynamically sized synopsis; no arbitrary four-line truncation.
+        synopsisLines.forEachIndexed { index, line ->
+            drawCentered(canvas, line, synopsisTop + index * synopsisLineHeight, synopsisPaint)
         }
 
-        // Three cinematic stills, evenly sized in a single row.
-        val stillTop = 1000f
+        // Only TMDB backdrops are used as scene thumbnails. Missing frames remain
+        // neutral placeholders rather than being replaced by promotional artwork.
         val gap = 16f
         val stillWidth = (contentWidth - gap * 2f) / 3f
         for (index in 0..2) {
             val left = margin + index * (stillWidth + gap)
             drawRoundedImage(canvas, stills.getOrNull(index),
-                RectF(left, stillTop, left + stillWidth, stillTop + 166f), 18f, paint)
+                RectF(left, stillTop, left + stillWidth, stillTop + stillHeight), 18f, paint)
         }
-        stills.drop(3).forEach { it.recycle() }
 
-        // Glowing purple recommendation button.
-        val button = RectF(210f, 1190f, 870f, 1295f)
-        paint.setShadowLayer(24f, 0f, 0f, 0xFF9E24FF.toInt())
+        // Film-strip decoration is drawn behind and below the CTA, not as dots/dashes.
+        drawFilmStrip(canvas, -12f, stripTop, 330f, 105f, paint)
+        drawFilmStrip(canvas, 760f, stripTop, 330f, 105f, paint)
+
+        // Precisely centered play icon + label as one measured group.
+        val button = RectF(190f, buttonTop, 890f, buttonBottom)
+        paint.setShadowLayer(25f, 0f, 0f, 0xFF9E24FF.toInt())
         paint.shader = LinearGradient(button.left, button.top, button.left, button.bottom,
             intArrayOf(0xFFB82CFF.toInt(), 0xFF6500C9.toInt(), 0xFF35006E.toInt()),
             null, Shader.TileMode.CLAMP)
@@ -312,27 +287,35 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         paint.color = 0xFFE5A8FF.toInt()
         canvas.drawRoundRect(button, 54f, 54f, paint)
         paint.style = Paint.Style.FILL
-        paint.color = Color.WHITE
-        val play = Path().apply {
-            moveTo(334f, 1225f); lineTo(334f, 1260f); lineTo(365f, 1242f); close()
+        val buttonTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 43f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
-        canvas.drawPath(play, paint)
-        paint.textSize = 43f
-        paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-        drawCentered(canvas, "Minha Indicação", 1260f, paint, 610f)
+        val label = "Minha Indicação"
+        val playWidth = 34f
+        val gapToLabel = 22f
+        val groupWidth = playWidth + gapToLabel + buttonTextPaint.measureText(label)
+        val groupLeft = (width - groupWidth) / 2f
+        val play = Path().apply {
+            moveTo(groupLeft, buttonTop + 34f)
+            lineTo(groupLeft, buttonTop + 72f)
+            lineTo(groupLeft + playWidth, buttonTop + 53f)
+            close()
+        }
+        buttonTextPaint.color = Color.WHITE
+        canvas.drawPath(play, buttonTextPaint)
+        canvas.drawText(label, groupLeft + playWidth + gapToLabel, buttonTop + 67f, buttonTextPaint)
 
-        // Film-strip accents and signature line.
-        drawFilmStrip(canvas, -18f, 1202f, 290f, 115f, paint)
-        drawFilmStrip(canvas, 805f, 1200f, 300f, 115f, paint)
         paint.color = 0xFF9C35E8.toInt()
         paint.strokeWidth = 2f
-        canvas.drawLine(54f, 1324f, 215f, 1324f, paint)
-        canvas.drawLine(865f, 1324f, 1026f, 1324f, paint)
+        val footerY = buttonBottom + 145f
+        canvas.drawLine(54f, footerY - 8f, 215f, footerY - 8f, paint)
+        canvas.drawLine(865f, footerY - 8f, 1026f, footerY - 8f, paint)
         paint.color = 0xFFF6F0FA.toInt()
         paint.textSize = 25f
         paint.typeface = Typeface.create("sans-serif", Typeface.ITALIC)
-        val footer = "Compartilhe essa dica incrível do CineVerso!"
-        drawCentered(canvas, footer, 1333f, paint)
+        drawCentered(canvas, "Compartilhe essa dica incrível do CineVerso!", footerY, paint)
 
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "cineverso_${item.type}_${item.id}.png")
