@@ -284,7 +284,29 @@ class MainActivity : ComponentActivity() {
             var message by remember { mutableStateOf("Sua próxima história começa aqui.") }
             var sharingRecommendation by remember { mutableStateOf(false) }
             var pendingSceneItem by remember { mutableStateOf<TmdbResult?>(null) }
+            var pendingHeroUri by remember { mutableStateOf<Uri?>(null) }
+            var waitingForHeroSelection by remember { mutableStateOf(false) }
             var waitingForSceneSelection by remember { mutableStateOf(false) }
+            val heroImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selectedUri ->
+                if (selectedUri != null) {
+                    runCatching {
+                        contentResolver.takePersistableUriPermission(selectedUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    pendingHeroUri = selectedUri
+                    waitingForHeroSelection = false
+                    val selectedItem = pendingSceneItem
+                    if (selectedItem != null) {
+                        val originalTitle = selectedItem.title
+                        val sceneTerm = if (selectedItem.type == "tv") "episode screenshots" else "movie scenes screenshots"
+                        val sceneSearchUrl = "https://www.google.com/search?tbm=isch&q=" +
+                            Uri.encode("$originalTitle $sceneTerm -poster -fanart -wallpaper -banner -logo")
+                        waitingForSceneSelection = true
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(sceneSearchUrl)))
+                    }
+                } else {
+                    waitingForHeroSelection = false
+                }
+            }
             val sceneImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { selectedUris ->
                 val selectedItem = pendingSceneItem
                 waitingForSceneSelection = false
@@ -298,7 +320,7 @@ class MainActivity : ComponentActivity() {
                         sharingRecommendation = true
                         lifecycleScope.launch {
                             try {
-                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedItem, apiKey, selectedUris.take(3))
+                                val imageUri = createCineVersoShareCard(this@MainActivity, selectedItem, apiKey, selectedUris.take(3), pendingHeroUri)
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "image/png"
                                     putExtra(Intent.EXTRA_STREAM, imageUri)
@@ -311,6 +333,8 @@ class MainActivity : ComponentActivity() {
                             } finally {
                                 sharingRecommendation = false
                                 pendingSceneItem = null
+                                pendingHeroUri = null
+                                waitingForHeroSelection = false
                                 waitingForSceneSelection = false
                             }
                         }
@@ -778,14 +802,14 @@ class MainActivity : ComponentActivity() {
                                                         lifecycleScope.launch {
                                                             try {
                                                                 pendingSceneItem = selectedTitle
+                                                                pendingHeroUri = null
                                                                 val originalTitle = runCatching {
                                                                     TmdbClient.shareCardDetails(selectedTitle.id, selectedTitle.type, apiKey).originalTitle
                                                                 }.getOrNull()?.takeIf { it.isNotBlank() } ?: selectedTitle.title
-                                                                val searchTerm = if (selectedTitle.type == "tv") "episode screenshots" else "movie scenes screenshots"
-                                                                val searchUrl = "https://www.google.com/search?tbm=isch&q=" +
-                                                                    Uri.encode("$originalTitle $searchTerm -poster -fanart -wallpaper -banner -logo")
-                                                                waitingForSceneSelection = true
-                                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl)))
+                                                                val bannerSearchUrl = "https://www.google.com/search?tbm=isch&q=" +
+                                                                    Uri.encode("$originalTitle movie backdrop still -poster -logo -collage")
+                                                                waitingForHeroSelection = true
+                                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(bannerSearchUrl)))
                                                             } catch (error: Exception) {
                                                                 Toast.makeText(this@MainActivity, "Falha ao preparar o card: ${error.message ?: "verifique sua conexão"}", Toast.LENGTH_LONG).show()
                                                             } finally {
@@ -806,6 +830,17 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 } else Text("COMPARTILHAR RECOMENDAÇÃO", fontWeight = FontWeight.Bold)
                                             }
+                                            if (waitingForHeroSelection && pendingSceneItem?.id == selectedTitle.id) {
+                                                Spacer(Modifier.height(8.dp))
+                                                Button(
+                                                    onClick = { heroImagePicker.launch(arrayOf("image/*")) },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                                                ) {
+                                                    Text("SELECIONAR BANNER PRINCIPAL", color = Color.White, fontWeight = FontWeight.Bold)
+                                                }
+                                                Text("Escolha no Google Imagens um banner horizontal da produção. A imagem será usada somente na geração do card, sem ser salva na galeria.", color = Muted, fontSize = 11.sp)
+                                            }
                                             if (waitingForSceneSelection && pendingSceneItem?.id == selectedTitle.id) {
                                                 Spacer(Modifier.height(8.dp))
                                                 Button(
@@ -815,7 +850,7 @@ class MainActivity : ComponentActivity() {
                                                 ) {
                                                     Text("JÁ ESCOLHI AS 3 CENAS — GERAR CARD", color = Color.White, fontWeight = FontWeight.Bold)
                                                 }
-                                                Text("Depois de salvar as três capturas do Google Imagens, volte aqui e toque no botão acima. A geração começará automaticamente.", color = Muted, fontSize = 11.sp)
+                                                Text("Depois de selecionar o banner, escolha três capturas reais de cenas no Google Imagens. Volte aqui e selecione as três imagens para gerar o card.", color = Muted, fontSize = 11.sp)
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text("TRAILER", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1314,7 +1349,7 @@ class MainActivity : ComponentActivity() {
                                 Spacer(Modifier.height(8.dp))
                                 Divider(color = Muted.copy(alpha = .25f))
                                 Text("TRÊS CENAS PARA SUA INDICAÇÃO", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text("Ao gerar uma indicação, o CineVerso abre o Google Imagens com o título original e termos de busca por cenas. Salve três capturas reais no aparelho; ao voltar, selecione as três imagens. Não usamos API paga nem substituímos cenas por pôsteres ou artes promocionais.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                Text("Ao gerar uma indicação, o CineVerso permite escolher primeiro um banner horizontal no Google Imagens e depois três capturas reais de cenas. As imagens selecionadas são usadas temporariamente na composição; não são adicionadas à galeria nem substituídas por pôsteres ou artes promocionais.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 OutlinedButton(onClick = {
                                     val json = JSONArray()
                                     all.forEach { m -> json.put(JSONObject().put("title", m.title).put("tmdbId", m.tmdbId).put("mediaType", m.mediaType).put("year", m.year).put("posterPath", m.posterPath).put("overview", m.overview).put("status", m.status).put("rating", m.rating).put("watchedAt", m.watchedAt).put("runtimeMinutes", m.runtimeMinutes).put("genres", m.genres).put("totalSeasons", m.totalSeasons).put("watchedEpisodes", m.watchedEpisodes).put("totalEpisodes", m.totalEpisodes).put("releaseDate", m.releaseDate)) }
