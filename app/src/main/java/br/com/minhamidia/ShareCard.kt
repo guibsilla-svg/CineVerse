@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
 import coil.request.ImageRequest
+import coil.imageLoader
 import java.io.File
 import java.io.InputStream
 import br.com.minhamidia.data.TmdbClient
