@@ -15,6 +15,7 @@ android {
         versionCode = providers.gradleProperty("appVersionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("appVersionName").orNull ?: "1.0.0"
         buildConfigField("String", "TMDB_API_KEY", "\"ed317a1df951109bde5285a44be90bd9\"")
+        buildConfigField("String", "FANART_API_KEY", "\"2c7ac3303425ac6b84a7651fd74f820b\"")
     }
     signingConfigs {
         create("release") {
