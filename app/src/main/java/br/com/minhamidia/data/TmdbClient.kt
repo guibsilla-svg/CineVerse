@@ -183,8 +183,6 @@ object TmdbClient {
             }.sortedWith(compareByDescending<Triple<String, Double, Int>> { it.second }.thenByDescending { it.third })
         }.orEmpty()
         val backdropPath = backdropCandidates.firstOrNull()?.first
-        // TMDB's movie backdrops are the eligible cinematic frame collection.
-        val backdropStills = backdropCandidates.map { it.first }.distinct().take(9)
         // For series, collect episode stills from multiple real seasons. Never fall back
         // to series backdrops, posters, banners or logos for the three scene screenshots.
         val episodeStills = if (type == "tv") runCatching {
