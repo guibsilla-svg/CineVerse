@@ -57,24 +57,15 @@ private fun hasUsablePicture(bitmap: Bitmap, minRatio: Float = 1.25f): Boolean {
     if (bitmap.width < 300 || bitmap.height < 160) return false
     val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
     if (ratio < minRatio || ratio > 2.5f) return false
-    var sum = 0.0
-    var sumSquares = 0.0
-    var visible = 0
-    var samples = 0
-    // Sample across the complete frame, not only its upper-left corner.
-    for (row in 0 until 12) for (column in 0 until 12) {
-        val px = (column * (bitmap.width - 1) / 11).coerceIn(0, bitmap.width - 1)
-        val py = (row * (bitmap.height - 1) / 11).coerceIn(0, bitmap.height - 1)
-        val pixel = bitmap.getPixel(px, py)
-        val luminance = (Color.red(pixel) * 0.2126 + Color.green(pixel) * 0.7152 + Color.blue(pixel) * 0.0722)
-        sum += luminance
-        sumSquares += luminance * luminance
-        if (luminance > 24.0) visible++
-        samples++
-    }
-    val mean = sum / samples
-    val deviation = kotlin.math.sqrt((sumSquares / samples) - mean * mean)
-    return mean > 12.0 && deviation > 8.0 && visible >= 8
+    return true
+}
+
+// User-selected scene captures can be dark, portrait, or smaller Google thumbnails.
+// Do not reject real frames based on brightness or a narrow landscape ratio.
+private fun hasUsableScene(bitmap: Bitmap): Boolean {
+    if (bitmap.width < 120 || bitmap.height < 80) return false
+    val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+    return ratio in 0.4f..3.5f
 }
 
 private fun drawContain(canvas: Canvas, image: Bitmap, target: RectF, paint: Paint) {
@@ -209,7 +200,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
                     420
                 )
             }.getOrNull()?.let { bitmap ->
-                if (hasUsablePicture(bitmap, 1.1f)) bitmap
+                if (hasUsableScene(bitmap)) bitmap
                 else { bitmap.recycle(); null }
             }
         }
