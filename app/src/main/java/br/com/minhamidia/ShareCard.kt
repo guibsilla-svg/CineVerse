@@ -262,7 +262,7 @@ suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, c
             textSize = 29f
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
-        val synopsisTop = metaY + 62f
+        val synopsisTop = metaY + 78f
         val synopsisLines = wrapShareText(synopsis, synopsisPaint, textWidth)
         val synopsisLineHeight = 41f
         val synopsisBottom = synopsisTop + synopsisLines.size * synopsisLineHeight
@@ -314,14 +314,24 @@ suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, c
         titleLines.forEachIndexed { index, line ->
             canvas.drawText(line, textLeft, top + titlePaint.textSize + index * titleLineHeight, titlePaint)
         }
+        val mediaTypeLabel = if (item.type == "tv") {
+            val seasons = info?.seasonsCount ?: 0
+            "SÉRIE" + if (seasons > 0) " • $seasons " + if (seasons == 1) "TEMPORADA" else "TEMPORADAS" else ""
+        } else "FILME"
         val metaText = "$genre  |  ★ $rating/10  |  $year"
         metaPaint.textSize = if (metaPaint.measureText(metaText) > textWidth) 19f else 25f
         canvas.drawText(metaText, textLeft, metaY, metaPaint)
         val starX = textLeft + metaPaint.measureText("$genre  |  ")
         drawStar(canvas, starX + 5f, metaY - 9f, 12f, 5f,
             Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFC928.toInt() })
+        val typePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFD7A5F2.toInt()
+            textSize = 23f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+        }
+        canvas.drawText(mediaTypeLabel, textLeft, metaY + 39f, typePaint)
         synopsisLines.forEachIndexed { index, line ->
-            canvas.drawText(line, textLeft, synopsisTop + index * synopsisLineHeight, synopsisPaint)
+            canvas.drawText(line, textLeft, synopsisTop + 39f + index * synopsisLineHeight, synopsisPaint)
         }
 
         val button = RectF(230f, buttonTop, 850f, buttonBottom)
