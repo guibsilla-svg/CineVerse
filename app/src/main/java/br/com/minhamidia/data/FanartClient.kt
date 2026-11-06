@@ -47,9 +47,10 @@ object FanartClient {
             else listOf("hdmovielogo", "movielogo", "hdmovieclearart")
             val posterKeys = if (type == "tv") listOf("tvposter") else listOf("movieposter")
             val bannerKeys = if (type == "tv") listOf("tvbanner") else listOf("moviebanner")
+            // Dedicated frame thumbnails only. characterart/movieart are promotional artwork.
             val stillKeys = if (type == "tv")
-                listOf("tvthumb", "seasonthumb", "characterart")
-            else listOf("moviethumb", "movieart")
+                listOf("tvthumb", "seasonthumb")
+            else listOf("moviethumb")
 
             fun best(keys: List<String>): String? = keys.asSequence()
                 .flatMap { key ->
