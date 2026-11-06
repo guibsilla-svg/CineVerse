@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.*
 import android.net.Uri
 import androidx.core.content.FileProvider
+import androidx.core.graphics.drawable.toBitmap
+import coil.request.ImageRequest
 import java.io.File
 import java.io.InputStream
 import br.com.minhamidia.data.TmdbClient
@@ -209,15 +211,18 @@ private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
 suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
-        val posterCandidates = listOfNotNull(
-            item.posterPath,
-            info?.posterPath,
-            info?.fanartPosterUrl?.takeIf { it.startsWith("https://") }
-        ).distinct()
-        val poster = posterCandidates.firstNotNullOfOrNull { candidate ->
-            val imageUrl = if (candidate.startsWith("https://")) candidate
-                else "https://image.tmdb.org/t/p/w780${if (candidate.startsWith("/")) candidate else "/$candidate"}"
-            downloadShareImage(imageUrl)
+        // Use the exact TMDB image URL and Coil pipeline used by the app's poster views.
+        // This avoids a separate raw-HTTP decoder behaving differently from AsyncImage.
+        val posterPath = item.posterPath ?: info?.posterPath
+        val poster = posterPath?.let { path ->
+            val posterUrl = "https://image.tmdb.org/t/p/w500${if (path.startsWith("/")) path else "/$path"}"
+            runCatching {
+                val request = ImageRequest.Builder(context)
+                    .data(posterUrl)
+                    .allowHardware(false)
+                    .build()
+                context.imageLoader.execute(request).drawable?.toBitmap(config = Bitmap.Config.ARGB_8888)
+            }.getOrNull()
         }
         val width = 1080
         val margin = 58f
