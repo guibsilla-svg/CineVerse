@@ -289,6 +289,8 @@ class MainActivity : ComponentActivity() {
                 if (selectedItem != null) {
                     if (selectedUris.size < 3) {
                         Toast.makeText(this@MainActivity, "Selecione três capturas de cenas para continuar.", Toast.LENGTH_LONG).show()
+                        sharingRecommendation = false
+                        pendingSceneItem = null
                     } else {
                         lifecycleScope.launch {
                             try {
