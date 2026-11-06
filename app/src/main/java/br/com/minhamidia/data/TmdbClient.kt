@@ -204,7 +204,9 @@ object TmdbClient {
                 } }.awaitAll().flatten().distinct().take(9)
             }
         }.getOrDefault(emptyList()) else emptyList()
-        val stillPaths = if (type == "tv") episodeStills else backdropStills
+        // Movies use Fanart.tv's dedicated moviethumb frames in ShareCard.
+        // Do not repurpose TMDB backdrops as screenshot thumbnails.
+        val stillPaths = if (type == "tv") episodeStills else emptyList()
         val fanart = runCatching { FanartClient.artwork(id, type) }.getOrNull()
         return TmdbShareCardDetails(
             leadActor, genres, backdropPath, stillPaths,
