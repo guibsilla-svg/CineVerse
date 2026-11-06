@@ -188,9 +188,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
             canvas.drawText("CineVerso", 58f, 92f, paint)
         }
-        paint.color = 0xFF9D25F5.toInt()
-        paint.strokeWidth = 4f
-        canvas.drawLine(70f, 145f, 455f, 145f, paint)
+        // No decorative purple underline beneath the CineVerso logo.
 
         // Brazilian Portuguese title is rendered as text instead of relying on
         // language-dependent Fanart logos, which are often supplied only in English.
@@ -203,11 +201,17 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             textAlign = Paint.Align.CENTER
             setShadowLayer(6f, 2f, 4f, 0xD0000000.toInt())
         }
-        val titleLines = wrapShareText(title, titlePaint, 990f).take(2)
+        // Fit the complete Brazilian Portuguese title into the hero area.
+        var titleLines = wrapShareText(title, titlePaint, 990f)
+        while (titleLines.size > 2 && titlePaint.textSize > 48f) {
+            titlePaint.textSize -= 4f
+            titleLines = wrapShareText(title, titlePaint, 990f)
+        }
+        val titleLineHeight = titlePaint.textSize * 1.02f
         var titleY = if (titleLines.size == 1) 610f else 535f
         titleLines.forEach { line ->
             drawCentered(canvas, line, titleY, titlePaint)
-            titleY += 88f
+            titleY += titleLineHeight
         }
         titlePaint.clearShadowLayer()
 
