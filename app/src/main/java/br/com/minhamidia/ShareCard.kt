@@ -223,9 +223,9 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
             // the content URI in memory; do not copy it into shared/external storage.
             val manualHero = selectedHeroUri?.let { uri ->
                 runCatching { decodeSelectedScene(context, uri) }.getOrNull()
-            }?.takeIf { bitmap ->
-                if (bitmap != null && hasUsablePicture(bitmap, minRatio = 1.15f)) bitmap
-                else { bitmap?.recycle(); false }
+            }?.let { bitmap ->
+                if (hasUsablePicture(bitmap, minRatio = 1.15f)) bitmap
+                else { bitmap.recycle(); null }
             }
             val remoteHero = if (manualHero == null) heroCandidates.firstNotNullOfOrNull { url ->
                 downloadShareImage(url)?.let { bitmap ->
