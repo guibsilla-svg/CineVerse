@@ -205,6 +205,117 @@ private fun drawCinemaDivider(canvas: Canvas, centerY: Float, paint: Paint) {
     paint.style = Paint.Style.FILL
 }
 
+
+suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
+    withContext(Dispatchers.IO) {
+        val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
+        val backdropCandidates = listOfNotNull(
+            info?.fanartBackgroundUrl,
+            info?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
+        ).distinct()
+        val backdrop = backdropCandidates.firstNotNullOfOrNull { downloadShareImage(it) }
+        val poster = if (backdrop == null) item.posterPath?.let {
+            downloadShareImage("https://image.tmdb.org/t/p/w780$it")
+        } else null
+
+        val width = 1080
+        val height = 1350
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        paint.shader = LinearGradient(0f, 0f, 0f, height.toFloat(),
+            intArrayOf(0xFF08060D.toInt(), 0xFF1B1028.toInt(), 0xFF08060D.toInt()),
+            null, Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        paint.shader = null
+
+        val heroBottom = 760f
+        if (backdrop != null) {
+            drawCrop(canvas, backdrop, RectF(0f, 0f, width.toFloat(), heroBottom), paint)
+            backdrop.recycle()
+        } else if (poster != null) {
+            drawContain(canvas, poster, RectF(280f, 40f, 800f, heroBottom - 20f), paint)
+            poster.recycle()
+        }
+        paint.shader = LinearGradient(0f, 0f, 0f, heroBottom,
+            intArrayOf(0x22000000, 0xF508060D.toInt()), null, Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, width.toFloat(), heroBottom, paint)
+        paint.shader = null
+
+        val logo = BitmapFactory.decodeResource(context.resources, R.drawable.cineverse_logo_horizontal)
+        if (logo != null) {
+            val scale = minOf(390f / logo.width, 92f / logo.height)
+            canvas.drawBitmap(logo, null, RectF(54f, 28f, 54f + logo.width * scale, 28f + logo.height * scale), paint)
+            logo.recycle()
+        }
+
+        val title = (info?.localizedTitle?.takeIf { it.isNotBlank() } ?: item.title)
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 76f
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            setShadowLayer(7f, 2f, 3f, Color.BLACK)
+        }
+        var titleLines = wrapShareText(title, titlePaint, 960f)
+        while (titleLines.size > 2 && titlePaint.textSize > 44f) {
+            titlePaint.textSize -= 4f
+            titleLines = wrapShareText(title, titlePaint, 960f)
+        }
+        var titleY = if (titleLines.size == 1) 620f else 555f
+        titleLines.forEach { line ->
+            drawCentered(canvas, line, titleY, titlePaint)
+            titleY += titlePaint.textSize * 1.05f
+        }
+        titlePaint.clearShadowLayer()
+
+        val genre = info?.genres.orEmpty().take(2).joinToString(" • ").ifBlank { "Cinema" }
+        val meta = "$genre   •   ${item.year.ifBlank { "—" }}   •   " +
+            if (item.tmdbVoteAverage > 0.0) String.format(Locale("pt", "BR"), "★ %.1f/10", item.tmdbVoteAverage) else "Sem avaliação TMDB"
+        val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFE0B5FF.toInt()
+            textSize = 29f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(meta, 540f, 815f, metaPaint)
+
+        val synopsis = item.overview.ifBlank { "Uma história que merece entrar na sua lista." }
+        val synopsisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFF0EAF4.toInt()
+            textSize = 34f
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            textAlign = Paint.Align.CENTER
+        }
+        val lines = wrapShareText(synopsis, synopsisPaint, 900f).take(8)
+        lines.forEachIndexed { index, line -> drawCentered(canvas, line, 910f + index * 48f, synopsisPaint) }
+
+        val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFB96BEA.toInt()
+            textSize = 35f
+            typeface = Typeface.create("sans-serif-bold", Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("MINHA INDICAÇÃO  •  CINEVERSO", 540f, 1280f, footerPaint)
+
+        val shareDir = File(context.cacheDir, "shared_recommendations").apply { mkdirs() }
+        shareDir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() }?.drop(2)?.forEach { it.delete() }
+        val outputFile = File(shareDir, "cineverso_simple_${item.type}_${item.id}_${System.currentTimeMillis()}.png")
+        try {
+            outputFile.outputStream().buffered().use { stream ->
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+                    throw IllegalStateException("Não foi possível salvar a imagem gerada")
+                }
+            }
+            bitmap.recycle()
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outputFile)
+        } catch (error: Exception) {
+            bitmap.recycle()
+            outputFile.delete()
+            throw error
+        }
+    }
+
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String, selectedSceneUris: List<Uri>, selectedHeroUri: Uri? = null): Uri =
     withContext(Dispatchers.IO) {
         val info = runCatching { TmdbClient.shareCardDetails(item.id, item.type, credential) }.getOrNull()
@@ -473,7 +584,7 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
                 }
             }
             bitmap.recycle()
-            FileProvider.getUriForFile(context, "br.com.cineverse.fileprovider", outputFile)
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outputFile)
         } catch (error: Exception) {
             bitmap.recycle()
             outputFile.delete()
