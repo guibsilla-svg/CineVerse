@@ -95,31 +95,55 @@ private fun drawStar(canvas: Canvas, cx: Float, cy: Float, outer: Float, inner: 
 }
 
 private fun drawFilmStrip(canvas: Canvas, left: Float, top: Float, width: Float, height: Float, paint: Paint) {
+    // Continuous curved celluloid ribbon: outer rails, dark image channel and
+    // paired sprocket perforations rotated to follow the ribbon's direction.
     val path = Path().apply {
-        moveTo(left, top + height * .28f)
-        cubicTo(left + width * .20f, top - 18f, left + width * .28f, top + height * 1.08f, left + width * .50f, top + height * .60f)
-        cubicTo(left + width * .72f, top + height * .12f, left + width * .80f, top + height * 1.18f, left + width, top + height * .42f)
+        moveTo(left, top + height * .52f)
+        cubicTo(left + width * .18f, top - height * .12f,
+            left + width * .30f, top + height * 1.12f,
+            left + width * .50f, top + height * .52f)
+        cubicTo(left + width * .70f, top - height * .08f,
+            left + width * .82f, top + height * 1.12f,
+            left + width, top + height * .48f)
     }
-    // A filled film ribbon with a fine violet edge, rather than isolated dots and dashes.
     paint.shader = null
     paint.style = Paint.Style.STROKE
     paint.strokeCap = Paint.Cap.ROUND
     paint.strokeJoin = Paint.Join.ROUND
-    paint.strokeWidth = 54f
-    paint.color = 0xFF241032.toInt()
+    paint.color = 0xFFB45AE5.toInt()
+    paint.strokeWidth = 66f
     canvas.drawPath(path, paint)
-    paint.strokeWidth = 4f
-    paint.color = 0xFF9E42D6.toInt()
+    paint.color = 0xFF21102D.toInt()
+    paint.strokeWidth = 58f
     canvas.drawPath(path, paint)
+    paint.color = 0xFF09060D.toInt()
+    paint.strokeWidth = 34f
+    canvas.drawPath(path, paint)
+
+    val measure = PathMeasure(path, false)
+    val length = measure.length
+    val position = FloatArray(2)
+    val tangent = FloatArray(2)
+    val holePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFD9A0F4.toInt() }
+    var distance = 22f
+    while (distance < length - 12f) {
+        if (measure.getPosTan(distance, position, tangent)) {
+            val angle = Math.toDegrees(kotlin.math.atan2(tangent[1], tangent[0]).toDouble()).toFloat()
+            val normalX = -tangent[1]
+            val normalY = tangent[0]
+            for (side in listOf(-1f, 1f)) {
+                val cx = position[0] + normalX * 22f * side
+                val cy = position[1] + normalY * 22f * side
+                canvas.save()
+                canvas.rotate(angle, cx, cy)
+                canvas.drawRoundRect(RectF(cx - 8f, cy - 4.5f, cx + 8f, cy + 4.5f), 2.5f, 2.5f, holePaint)
+                canvas.restore()
+            }
+        }
+        distance += 39f
+    }
     paint.style = Paint.Style.FILL
     paint.strokeCap = Paint.Cap.BUTT
-    val hole = 12f
-    paint.color = 0xFFC77BEF.toInt()
-    for (i in 0..7) {
-        val x = left + 10f + i * (width - 28f) / 7f
-        canvas.drawRoundRect(RectF(x, top + height * .17f, x + hole, top + height * .17f + hole), 3f, 3f, paint)
-        canvas.drawRoundRect(RectF(x, top + height * .78f, x + hole, top + height * .78f + hole), 3f, 3f, paint)
-    }
 }
 
 suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credential: String): Uri =
@@ -129,7 +153,9 @@ suspend fun createCineVersoShareCard(context: Context, item: TmdbResult, credent
         val heroPath = info?.backdropPath ?: item.posterPath
         // The three thumbnails deliberately use TMDB image backdrops only (scene frames),
         // never Fanart posters, banners, logos or promotional key art.
-        val sceneUrls = info?.stillPaths.orEmpty().take(3).map { "https://image.tmdb.org/t/p/w780$it" }
+        // Only dedicated scene-thumbnail sources are eligible here.
+        // Fanart.tv movie thumbs are actual film-frame thumbnails; never use backdrops/key art.
+        val sceneUrls = info?.fanartStillUrls.orEmpty().take(3)
         val (hero, stills) = coroutineScope {
             val heroTask = async {
                 heroUrl?.let { downloadShareImage(it) }
