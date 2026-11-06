@@ -49,7 +49,8 @@ data class TmdbShareCardDetails(
     val fanartStillUrls: List<String> = emptyList(),
     val localizedTitle: String = "",
     val originalTitle: String = "",
-    val posterPath: String? = null
+    val posterPath: String? = null,
+    val seasonsCount: Int = 0
 )
 
 object TmdbClient {
@@ -243,6 +244,13 @@ object TmdbClient {
             localizedTitle = details.optString(if (type == "tv") "name" else "title").ifBlank { details.optString(if (type == "tv") "original_name" else "original_title") },
             originalTitle = details.optString(if (type == "tv") "original_name" else "original_title").ifBlank { details.optString(if (type == "tv") "name" else "title") },
             posterPath = details.optString("poster_path").takeIf { it.startsWith("/") },
+            seasonsCount = if (type == "tv") {
+                details.optJSONArray("seasons")?.let { seasons ->
+                    (0 until seasons.length()).count { index ->
+                        (seasons.optJSONObject(index)?.optInt("season_number") ?: 0) > 0
+                    }
+                } ?: 0
+            } else 0,
             fanartBackgroundUrl = fanart?.backgroundUrl,
             fanartLogoUrl = fanart?.logoUrl,
             fanartPosterUrl = fanart?.posterUrl,
