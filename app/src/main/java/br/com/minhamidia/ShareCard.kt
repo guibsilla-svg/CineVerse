@@ -262,7 +262,7 @@ suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, c
             textSize = 29f
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
-        val synopsisTop = metaY + 78f
+        val synopsisTop = metaY + 101f
         val synopsisLines = wrapShareText(synopsis, synopsisPaint, textWidth)
         val synopsisLineHeight = 41f
         val synopsisBottom = synopsisTop + synopsisLines.size * synopsisLineHeight
@@ -331,7 +331,7 @@ suspend fun createSimpleCineVersoShareCard(context: Context, item: TmdbResult, c
         }
         canvas.drawText(mediaTypeLabel, textLeft, metaY + 39f, typePaint)
         synopsisLines.forEachIndexed { index, line ->
-            canvas.drawText(line, textLeft, synopsisTop + 39f + index * synopsisLineHeight, synopsisPaint)
+            canvas.drawText(line, textLeft, synopsisTop + index * synopsisLineHeight, synopsisPaint)
         }
 
         val button = RectF(230f, buttonTop, 850f, buttonBottom)
