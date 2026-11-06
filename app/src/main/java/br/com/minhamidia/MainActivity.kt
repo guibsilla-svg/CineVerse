@@ -695,7 +695,23 @@ class MainActivity : ComponentActivity() {
                                                 Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                                                if (!selectedTitle.posterPath.isNullOrBlank()) AsyncImage(model = "https://image.tmdb.org/t/p/w342${selectedTitle.posterPath}", contentDescription = selectedTitle.title, modifier = Modifier.width(112.dp).height(166.dp))
+                                                if (!selectedTitle.posterPath.isNullOrBlank()) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .width(120.dp)
+                                                            .height(178.dp)
+                                                            .background(Panel, RoundedCornerShape(12.dp))
+                                                            .padding(6.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = "https://image.tmdb.org/t/p/w500${selectedTitle.posterPath}",
+                                                            contentDescription = "Pôster completo de ${selectedTitle.title}",
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentScale = ContentScale.Fit
+                                                        )
+                                                    }
+                                                }
                                                 Column(Modifier.weight(1f)) {
                                                     Text(selectedTitle.title, color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                                     Text("${if (selectedTitle.type == "tv") "Série" else "Filme"} • ${selectedTitle.year}", color = Muted)
