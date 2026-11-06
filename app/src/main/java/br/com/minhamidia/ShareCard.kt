@@ -95,19 +95,28 @@ private fun drawStar(canvas: Canvas, cx: Float, cy: Float, outer: Float, inner: 
 }
 
 private fun drawFilmStrip(canvas: Canvas, left: Float, top: Float, width: Float, height: Float, paint: Paint) {
-    paint.color = 0xFF8F27E8.toInt()
-    paint.style = Paint.Style.STROKE
-    paint.strokeWidth = 8f
     val path = Path().apply {
         moveTo(left, top + height * .28f)
         cubicTo(left + width * .20f, top - 18f, left + width * .28f, top + height * 1.08f, left + width * .50f, top + height * .60f)
         cubicTo(left + width * .72f, top + height * .12f, left + width * .80f, top + height * 1.18f, left + width, top + height * .42f)
     }
+    // A filled film ribbon with a fine violet edge, rather than isolated dots and dashes.
+    paint.shader = null
+    paint.style = Paint.Style.STROKE
+    paint.strokeCap = Paint.Cap.ROUND
+    paint.strokeJoin = Paint.Join.ROUND
+    paint.strokeWidth = 54f
+    paint.color = 0xFF241032.toInt()
+    canvas.drawPath(path, paint)
+    paint.strokeWidth = 4f
+    paint.color = 0xFF9E42D6.toInt()
     canvas.drawPath(path, paint)
     paint.style = Paint.Style.FILL
-    val hole = 13f
+    paint.strokeCap = Paint.Cap.BUTT
+    val hole = 12f
+    paint.color = 0xFFC77BEF.toInt()
     for (i in 0..7) {
-        val x = left + i * width / 7f
+        val x = left + 10f + i * (width - 28f) / 7f
         canvas.drawRoundRect(RectF(x, top + height * .17f, x + hole, top + height * .17f + hole), 3f, 3f, paint)
         canvas.drawRoundRect(RectF(x, top + height * .78f, x + hole, top + height * .78f + hole), 3f, 3f, paint)
     }
