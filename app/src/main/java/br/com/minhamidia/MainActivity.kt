@@ -278,6 +278,13 @@ class MainActivity : ComponentActivity() {
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
             var detailReturnPage by remember { mutableStateOf("Buscar") }
+            fun returnFromDetails() {
+                val destination = detailReturnPage
+                if (pageHistory.lastOrNull() == destination) {
+                    pageHistory.removeAt(pageHistory.lastIndex)
+                }
+                page = destination
+            }
             var detailSeasons by remember { mutableStateOf("[]") }
             var detailLoading by remember { mutableStateOf(false) }
             var detailRuntimeMinutes by remember { mutableStateOf<Int?>(null) }
@@ -286,6 +293,8 @@ class MainActivity : ComponentActivity() {
             var detailTrailerLoading by remember { mutableStateOf(false) }
             var personalRatingInput by remember { mutableIntStateOf(0) }
             var franchiseCollections by remember { mutableStateOf(emptyList<br.com.minhamidia.data.TmdbFranchise>()) }
+            var myListFranchiseCollections by remember { mutableStateOf(emptyList<TmdbFranchise>()) }
+            var lastNormalListFilter by remember { mutableStateOf("Quero assistir") }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendationsLoading by remember { mutableStateOf(false) }
@@ -422,10 +431,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = showKey || editingSeries != null || pageHistory.isNotEmpty()) {
+            BackHandler(enabled = showKey || editingSeries != null || page == "Detalhes" || (page == "Minha lista" && filter == "Franquias") || (page == "Explorar" && exploreCategory == "franchises") || pageHistory.isNotEmpty()) {
                 when {
                     showKey -> showKey = false
                     editingSeries != null -> editingSeries = null
+                    page == "Detalhes" -> returnFromDetails()
+                    page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
+                    page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
+                    page == "Explorar" && exploreCategory == "franchises" -> { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }
                     pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
                 }
             }
@@ -490,6 +503,15 @@ class MainActivity : ComponentActivity() {
                     }
                     franchiseCollections = loadedCollections
                 } else if (page != "Franquias") franchiseCollections = emptyList()
+            }
+            LaunchedEffect(page, filter, apiKey, franchiseIdsKey) {
+                if (page == "Minha lista" && filter == "Franquias" && apiKey.isNotBlank()) {
+                    myListFranchiseCollections = franchiseIds.mapNotNull { id ->
+                        runCatching { TmdbClient.franchiseCollection(id, apiKey) }.getOrNull()
+                    }
+                } else if (page != "Minha lista" || filter != "Franquias") {
+                    myListFranchiseCollections = emptyList()
+                }
             }
 
             LaunchedEffect(apiKey, tasteProfileKey, favorites, homeOrder) {
@@ -753,6 +775,9 @@ class MainActivity : ComponentActivity() {
                                     Spacer(Modifier.height(8.dp))
                                     if (exploreCategory == "franchises") {
                                         if (selectedExploreFranchise == null) {
+                                            TextButton(onClick = { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }) {
+                                                Text("‹ Voltar para Explorar", color = Purple)
+                                            }
                                             Text("UNIVERSOS CINEMATOGRÁFICOS", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
                                             Text("Explore franquias", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                             Text("Conheça as sagas e descubra todos os filmes de cada universo.", color = Muted, fontSize = 12.sp)
@@ -881,7 +906,7 @@ class MainActivity : ComponentActivity() {
                                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                                         item {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                TextButton(onClick = { page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage }) { Text("← Voltar") }
+                                                TextButton(onClick = { returnFromDetails() }) { Text("← Voltar") }
                                                 Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
@@ -1212,9 +1237,12 @@ class MainActivity : ComponentActivity() {
                                         .groupBy { it.franchiseId!! }
                                         .toList()
                                         .sortedBy { entry -> entry.second.firstOrNull()?.franchiseName?.lowercase() ?: "" }
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        TextButton(onClick = { filter = lastNormalListFilter }) { Text("← Voltar para minha lista", color = Purple) }
+                                    }
                                     Text("FRANQUIAS DA MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     Text(
-                                        "${franchiseGroups.size} franquias • somente títulos adicionados à sua coleção",
+                                        "${franchiseGroups.size} franquias • veja também os filmes que faltam na sua coleção",
                                         color = Muted,
                                         fontSize = 11.sp
                                     )
@@ -1253,34 +1281,54 @@ class MainActivity : ComponentActivity() {
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold
                                                     )
+                                                    val franchiseData = myListFranchiseCollections.firstOrNull { it.id == group.first }
+                                                    val franchiseParts = franchiseData?.parts ?: franchiseMovies.map { media ->
+                                                        TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage)
+                                                    }
                                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                        items(franchiseMovies, key = { it.id }) { media ->
-                                                            Column(
-                                                                Modifier.width(104.dp).clickable {
-                                                                    detailItem = TmdbResult(
-                                                                        media.tmdbId ?: 0,
-                                                                        media.title,
-                                                                        media.mediaType,
-                                                                        media.year,
-                                                                        media.posterPath,
-                                                                        media.overview,
-                                                                        media.releaseDate,
-                                                                        media.tmdbVoteAverage
-                                                                    )
+                                                        items(franchiseParts, key = { it.id }) { part ->
+                                                            val saved = all.firstOrNull { it.tmdbId == part.id && it.mediaType == "movie" }
+                                                            Column(Modifier.width(104.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                Box(Modifier.fillMaxWidth().clickable {
+                                                                    detailItem = part
                                                                     detailReturnPage = "Minha lista"
-                                                                    detailSeasons = media.seasonProgress.ifBlank { "[]" }
+                                                                    detailSeasons = saved?.seasonProgress?.ifBlank { "[]" } ?: "[]"
                                                                     navigateTo("Detalhes")
-                                                                },
-                                                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                                                            ) {
-                                                                AsyncImage(
-                                                                    model = media.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
-                                                                    contentDescription = media.title,
-                                                                    modifier = Modifier.fillMaxWidth().height(148.dp).background(Night, RoundedCornerShape(8.dp)),
-                                                                    contentScale = ContentScale.Crop
-                                                                )
-                                                                Text(media.title, color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 2)
-                                                                Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 9.sp)
+                                                                }) {
+                                                                    AsyncImage(
+                                                                        model = part.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
+                                                                        contentDescription = part.title,
+                                                                        modifier = Modifier.fillMaxWidth().height(148.dp).background(Night, RoundedCornerShape(8.dp)),
+                                                                        contentScale = ContentScale.Crop
+                                                                    )
+                                                                }
+                                                                Text(part.title, color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 2)
+                                                                Text(part.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 9.sp)
+                                                                if (saved == null) {
+                                                                    OutlinedButton(
+                                                                        onClick = {
+                                                                            lifecycleScope.launch {
+                                                                                if (dao.findByTmdbId(part.id, "movie") == null) {
+                                                                                    dao.insert(MediaItem(
+                                                                                        tmdbId = part.id, title = part.title, mediaType = "movie",
+                                                                                        year = part.year, posterPath = part.posterPath, overview = part.overview,
+                                                                                        status = "WATCHLIST", releaseDate = part.releaseDate,
+                                                                                        tmdbVoteAverage = part.tmdbVoteAverage, franchiseId = group.first,
+                                                                                        franchiseName = franchiseData?.name ?: franchiseMovies.firstOrNull()?.franchiseName.orEmpty()
+                                                                                    ))
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        modifier = Modifier.fillMaxWidth().height(34.dp),
+                                                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                                                    ) { Text("+ Adicionar", fontSize = 9.sp, maxLines = 1) }
+                                                                } else {
+                                                                    Text(when (saved.status) {
+                                                                        "WATCHED" -> "JÁ ASSISTI"
+                                                                        "WATCHING" -> "TÔ ASSISTINDO"
+                                                                        else -> "QUERO ASSISTIR"
+                                                                    }, color = Purple, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -1293,7 +1341,7 @@ class MainActivity : ComponentActivity() {
                                     items(listOf("Quero assistir", "Tô assistindo", "Já assisti", "Franquias")) { statusOption ->
                                         FilterChip(
                                             selected = filter == statusOption,
-                                            onClick = { filter = statusOption },
+                                            onClick = { if (statusOption != "Franquias") lastNormalListFilter = statusOption; filter = statusOption },
                                             label = { Text(statusOption, fontSize = 11.sp) }
                                         )
                                     }
