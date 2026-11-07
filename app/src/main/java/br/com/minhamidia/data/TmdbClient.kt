@@ -36,6 +36,7 @@ data class TmdbResult(
 
 data class TmdbTrailer(val key: String, val name: String, val language: String)
 data class TmdbFranchise(val id: Int, val name: String, val overview: String, val parts: List<TmdbResult>, val posterPath: String? = null, val backdropPath: String? = null)
+data class TmdbFranchisePage(val franchises: List<TmdbFranchise>, val page: Int, val totalPages: Int)
 data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
 data class TmdbShareCardDetails(
@@ -270,17 +271,41 @@ object TmdbClient {
         return franchiseCollection(collectionId, credential)
     }
 
-    // Coleções oficiais selecionadas para oferecer uma vitrine inicial variada em Explorar.
-    suspend fun featuredFranchises(credential: String): List<TmdbFranchise> = coroutineScope {
-        val collectionIds = listOf(
-            10, 1241, 119, 121938, 2344, 263, 86311, 9485, 328,
-            295, 8650, 87359, 1575, 10194, 2150, 86066, 404609, 131635
+    // Descobre coleções oficiais percorrendo o catálogo de filmes do TMDB.
+    // Cada página é convertida em franquias sem repetir coleções já encontradas.
+    suspend fun discoverFranchises(page: Int, credential: String): TmdbFranchisePage = coroutineScope {
+        val safePage = page.coerceIn(1, 500)
+        val catalog = requestObject(
+            "/discover/movie",
+            credential,
+            mapOf(
+                "language" to "pt-BR",
+                "sort_by" to "popularity.desc",
+                "include_adult" to "false",
+                "page" to safePage.toString(),
+                "vote_count.gte" to "5"
+            )
         )
-        collectionIds.map { id ->
-            async { runCatching { franchiseCollection(id, credential) }.getOrNull() }
+        val totalPages = catalog.optInt("total_pages", safePage).coerceIn(1, 500)
+        val results = catalog.optJSONArray("results")
+        val movieIds = results?.let { array ->
+            (0 until array.length()).mapNotNull { index ->
+                array.optJSONObject(index)?.optInt("id")?.takeIf { it > 0 }
+            }
+        }.orEmpty()
+        val franchises = movieIds.map { movieId ->
+            async {
+                runCatching {
+                    val details = requestObject("/movie/$movieId", credential, mapOf("language" to "pt-BR"))
+                    val collectionId = details.optJSONObject("belongs_to_collection")?.optInt("id") ?: 0
+                    if (collectionId > 0) franchiseCollection(collectionId, credential) else null
+                }.getOrNull()
+            }
         }.awaitAll().filterNotNull()
             .filter { it.parts.isNotEmpty() }
+            .distinctBy { it.id }
             .sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+        TmdbFranchisePage(franchises, safePage, totalPages)
     }
 
     suspend fun franchiseCollection(collectionId: Int, credential: String): TmdbFranchise? {
