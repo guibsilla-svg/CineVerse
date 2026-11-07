@@ -61,6 +61,7 @@ import androidx.lifecycle.lifecycleScope
 import br.com.minhamidia.data.AppDatabase
 import br.com.minhamidia.data.MediaItem
 import br.com.minhamidia.data.TmdbClient
+import br.com.minhamidia.data.TmdbFranchise
 import br.com.minhamidia.data.TmdbResult
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
