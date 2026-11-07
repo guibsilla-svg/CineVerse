@@ -35,6 +35,7 @@ data class TmdbResult(
 }
 
 data class TmdbTrailer(val key: String, val name: String, val language: String)
+data class TmdbFranchise(val id: Int, val name: String, val overview: String, val parts: List<TmdbResult>)
 data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
 data class TmdbShareCardDetails(
@@ -258,6 +259,46 @@ object TmdbClient {
             fanartPosterUrl = fanart?.posterUrl,
             fanartBannerUrl = fanart?.bannerUrl,
             fanartStillUrls = fanart?.stillUrls.orEmpty()
+        )
+    }
+
+
+    suspend fun franchiseForMovie(id: Int, credential: String): TmdbFranchise? {
+        val details = requestObject("/movie/$id", credential, mapOf("language" to "pt-BR"))
+        val collection = details.optJSONObject("belongs_to_collection") ?: return null
+        val collectionId = collection.optInt("id").takeIf { it > 0 } ?: return null
+        return franchiseCollection(collectionId, credential)
+    }
+
+    suspend fun franchiseCollection(collectionId: Int, credential: String): TmdbFranchise? {
+        if (collectionId <= 0) return null
+        val collection = requestObject("/collection/$collectionId", credential, mapOf("language" to "pt-BR"))
+        val parts = collection.optJSONArray("parts")
+        val titles = buildList {
+            if (parts != null) for (i in 0 until parts.length()) {
+                val item = parts.optJSONObject(i) ?: continue
+                val title = item.optString("title").trim()
+                if (title.isBlank()) continue
+                val date = item.optString("release_date")
+                add(TmdbResult(
+                    id = item.optInt("id"),
+                    title = title,
+                    type = "movie",
+                    year = date.take(4),
+                    posterPath = item.optString("poster_path").takeIf { it.startsWith("/") },
+                    overview = item.optString("overview"),
+                    releaseDate = date,
+                    tmdbVoteAverage = item.optDouble("vote_average", 0.0),
+                    voteCount = item.optInt("vote_count", 0),
+                    popularity = item.optDouble("popularity", 0.0)
+                ))
+            }
+        }.sortedWith(compareBy<TmdbResult> { it.releaseDate.ifBlank { "9999" } }.thenBy { it.title })
+        return TmdbFranchise(
+            id = collection.optInt("id", collectionId),
+            name = collection.optString("name").ifBlank { "Franquia" },
+            overview = collection.optString("overview"),
+            parts = titles
         )
     }
 
