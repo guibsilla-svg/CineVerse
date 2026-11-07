@@ -441,13 +441,14 @@ class MainActivity : ComponentActivity() {
             } ?: 0
             val franchiseIds = all.mapNotNull { it.franchiseId?.takeIf { id -> id > 0 } }.distinct().sorted()
             val franchiseIdsKey = franchiseIds.joinToString(",")
+            val tmdbItemCount = all.count { it.tmdbId != null }
             val franchiseScanCount = all.count { it.mediaType == "movie" && it.tmdbId != null }
             val tasteProfileKey = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
                 .joinToString("|") { "${it.id}:${it.mediaType}:${it.title}:${it.overview}:${it.genres}:${it.rating}" }
             LaunchedEffect(detailItem?.id, detailItem?.type, selectedPersonalRating) {
                 personalRatingInput = selectedPersonalRating
             }
-            LaunchedEffect(apiKey, franchiseScanCount) {
+            LaunchedEffect(apiKey, tmdbItemCount) {
                 if (apiKey.isNotBlank()) {
                     all.filter { it.tmdbId != null && it.tmdbVoteAverage <= 0.0 }.forEach { media ->
                         runCatching {
