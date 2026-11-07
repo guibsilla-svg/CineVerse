@@ -379,6 +379,7 @@ class MainActivity : ComponentActivity() {
             var rouletteError by remember { mutableStateOf("") }
             var exploreType by remember { mutableStateOf("movie") }
             var exploreCategory by remember { mutableStateOf("trending") }
+            var previousExploreCategory by remember { mutableStateOf("trending") }
             var exploreGenre by remember { mutableStateOf("Todos") }
             var exploreQuery by remember { mutableStateOf("") }
             var explorePage by remember { mutableStateOf(1) }
@@ -392,6 +393,12 @@ class MainActivity : ComponentActivity() {
             var selectedExploreFranchise by remember { mutableStateOf<TmdbFranchise?>(null) }
             var exploreFranchisesLoading by remember { mutableStateOf(false) }
             val exploreListState = rememberLazyListState()
+            val exploreFranchiseCatalogState = rememberLazyListState()
+            val exploreFranchiseMoviesState = rememberLazyListState()
+            val searchResultsState = rememberLazyListState()
+            val myListFranchiseState = rememberLazyListState()
+            val statisticsState = rememberLazyListState()
+            val calendarState = rememberLazyListState()
             val myListGridState = rememberLazyGridState()
             val rouletteWheelRotation = remember { Animatable(0f) }
             val rouletteScope = rememberCoroutineScope()
@@ -431,15 +438,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = showKey || editingSeries != null || page == "Detalhes" || (page == "Minha lista" && filter == "Franquias") || (page == "Explorar" && exploreCategory == "franchises") || pageHistory.isNotEmpty()) {
+            BackHandler(enabled = showKey || editingSeries != null || page != "Início" || pageHistory.isNotEmpty()) {
                 when {
                     showKey -> showKey = false
                     editingSeries != null -> editingSeries = null
                     page == "Detalhes" -> returnFromDetails()
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
                     page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
-                    page == "Explorar" && exploreCategory == "franchises" -> { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }
+                    page == "Explorar" && exploreCategory == "franchises" -> {
+                        exploreCategory = previousExploreCategory
+                        selectedExploreFranchise = null
+                        exploreCatalogLoadedKey = ""
+                    }
                     pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
+                    page != "Início" -> page = "Início"
                 }
             }
             var seasonInput by remember { mutableStateOf("") }
@@ -753,7 +765,7 @@ class MainActivity : ComponentActivity() {
                                     Text(if (exploreQuery.isBlank()) "DESCUBRA MAIS" else "RESULTADOS DA BUSCA", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
                                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         listOf("Em alta" to "trending", "Populares" to "popular", "Mais bem avaliados" to "top_rated", "Recentes" to "recent", "Em breve" to "upcoming", "Franquias" to "franchises").forEach { (label, value) ->
-                                            FilterChip(selected = exploreCategory == value, onClick = { exploreCategory = value; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }, label = { Text(label, fontSize = 11.sp) })
+                                            FilterChip(selected = exploreCategory == value, onClick = { if (value == "franchises" && exploreCategory != "franchises") previousExploreCategory = exploreCategory; exploreCategory = value; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }, label = { Text(label, fontSize = 11.sp) })
                                         }
                                     }
                                     var exploreGenreMenu by remember { mutableStateOf(false) }
@@ -775,7 +787,7 @@ class MainActivity : ComponentActivity() {
                                     Spacer(Modifier.height(8.dp))
                                     if (exploreCategory == "franchises") {
                                         if (selectedExploreFranchise == null) {
-                                            TextButton(onClick = { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }) {
+                                            TextButton(onClick = { exploreCategory = previousExploreCategory; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }) {
                                                 Text("‹ Voltar para Explorar", color = Purple)
                                             }
                                             Text("UNIVERSOS CINEMATOGRÁFICOS", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
@@ -786,7 +798,7 @@ class MainActivity : ComponentActivity() {
                                             } else if (exploreError.isNotBlank() && exploreFranchises.isEmpty()) {
                                                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(exploreError, color = Muted) }
                                             } else {
-                                                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                                LazyColumn(state = exploreFranchiseCatalogState, modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                                     items(exploreFranchises, key = { "franchise-${it.id}" }) { franchise ->
                                                         Card(onClick = { selectedExploreFranchise = franchise }, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
                                                             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -807,7 +819,7 @@ class MainActivity : ComponentActivity() {
                                                 Text(selectedExploreFranchise!!.name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
                                             }
                                             Text("FILMES EM ORDEM DE LANÇAMENTO", color = Muted, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp)
-                                            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                            LazyColumn(state = exploreFranchiseMoviesState, modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                                 items(selectedExploreFranchise!!.parts.chunked(3), key = { row -> "franchise-films-${row.firstOrNull()?.id ?: 0}" }) { rowItems ->
                                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                                         rowItems.forEach { item ->
@@ -883,7 +895,7 @@ class MainActivity : ComponentActivity() {
                                     Spacer(Modifier.width(8.dp)); Text(if (busy) "Pesquisando..." else "Pesquisar no TMDB")
                                 }
                                 Text(message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
-                                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                LazyColumn(state = searchResultsState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                                     items(results.filter { yearMatches(it.year, searchYearPeriod) }, key = { "${it.type}-${it.id}" }) { item ->
                                         val saved = all.any { it.tmdbId == item.id && it.mediaType == item.type }
                                         SearchCard(item, onOpen = {
@@ -1257,7 +1269,8 @@ class MainActivity : ComponentActivity() {
                                         }
                                     } else {
                                         LazyColumn(
-                                            Modifier.weight(1f),
+                                            state = myListFranchiseState,
+                                            modifier = Modifier.weight(1f),
                                             verticalArrangement = Arrangement.spacedBy(12.dp),
                                             contentPadding = PaddingValues(vertical = 12.dp)
                                         ) {
@@ -1541,7 +1554,7 @@ class MainActivity : ComponentActivity() {
                                 val watched = all.filter { it.status == "WATCHED" }
                                 val movies = all.count { it.mediaType == "movie" }
                                 val shows = all.count { it.mediaType == "tv" }
-                                                                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+                                                                LazyColumn(state = statisticsState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
                                     item { StatCard("Títulos na coleção", all.size.toString(), "Todos os filmes e séries salvos") }
                                     item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Box(Modifier.weight(1f)) { StatCard("Filmes", movies.toString(), "Na coleção") }; Box(Modifier.weight(1f)) { StatCard("Séries", shows.toString(), "Na coleção") } } }
                                     item { StatCard("Concluídos", watched.size.toString(), "Marcados como assistidos") }
@@ -1553,7 +1566,7 @@ class MainActivity : ComponentActivity() {
                                 val watched = all.filter { it.status == "WATCHED" && it.watchedAt != null }.sortedByDescending { it.watchedAt }
                                 Text("Histórico de títulos marcados como assistidos", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 10.dp))
                                 if (watched.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Seus títulos concluídos aparecerão aqui.", color = Muted) }
-                                else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                else LazyColumn(state = calendarState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(watched, key = { it.id }) { media ->
                                         val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date(media.watchedAt!!))
                                         Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
