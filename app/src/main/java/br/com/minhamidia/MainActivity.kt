@@ -61,6 +61,7 @@ import androidx.lifecycle.lifecycleScope
 import br.com.minhamidia.data.AppDatabase
 import br.com.minhamidia.data.MediaItem
 import br.com.minhamidia.data.TmdbClient
+import br.com.minhamidia.data.TmdbFranchise
 import br.com.minhamidia.data.TmdbResult
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
@@ -378,6 +379,9 @@ class MainActivity : ComponentActivity() {
             var exploreCanLoadMore by remember { mutableStateOf(true) }
             var exploreSearchLoadedKey by remember { mutableStateOf("") }
             var exploreCatalogLoadedKey by remember { mutableStateOf("") }
+            var exploreFranchises by remember { mutableStateOf(emptyList<TmdbFranchise>()) }
+            var selectedExploreFranchise by remember { mutableStateOf<TmdbFranchise?>(null) }
+            var exploreFranchisesLoading by remember { mutableStateOf(false) }
             val exploreListState = rememberLazyListState()
             val myListGridState = rememberLazyGridState()
             val rouletteWheelRotation = remember { Animatable(0f) }
@@ -600,7 +604,17 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, exploreYearPeriod, apiKey, exploreQuery) {
                 val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$exploreYearPeriod|$apiKey|${exploreQuery.trim()}"
-                if (page == "Explorar" && exploreQuery.isBlank() && exploreCatalogLoadedKey != catalogKey) {
+                if (page == "Explorar" && exploreQuery.isBlank() && exploreCategory == "franchises" && exploreFranchises.isEmpty() && !exploreFranchisesLoading) {
+                    if (apiKey.isBlank()) exploreError = "Configure sua credencial TMDB em Mais > Config."
+                    else {
+                        exploreFranchisesLoading = true
+                        exploreError = ""
+                        runCatching { TmdbClient.featuredFranchises(apiKey) }
+                            .onSuccess { exploreFranchises = it }
+                            .onFailure { exploreError = it.message ?: "Não foi possível carregar as franquias." }
+                        exploreFranchisesLoading = false
+                    }
+                } else if (page == "Explorar" && exploreQuery.isBlank() && exploreCategory != "franchises" && exploreCatalogLoadedKey != catalogKey) {
                     explorePage = 1
                     exploreResults = emptyList()
                     exploreError = ""
@@ -716,12 +730,13 @@ class MainActivity : ComponentActivity() {
                                     Spacer(Modifier.height(8.dp))
                                     Text(if (exploreQuery.isBlank()) "DESCUBRA MAIS" else "RESULTADOS DA BUSCA", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
                                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf("Em alta" to "trending", "Populares" to "popular", "Mais bem avaliados" to "top_rated", "Recentes" to "recent", "Em breve" to "upcoming").forEach { (label, value) ->
-                                            FilterChip(selected = exploreCategory == value, onClick = { exploreCategory = value }, label = { Text(label, fontSize = 11.sp) })
+                                        listOf("Em alta" to "trending", "Populares" to "popular", "Mais bem avaliados" to "top_rated", "Recentes" to "recent", "Em breve" to "upcoming", "Franquias" to "franchises").forEach { (label, value) ->
+                                            FilterChip(selected = exploreCategory == value, onClick = { exploreCategory = value; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }, label = { Text(label, fontSize = 11.sp) })
                                         }
                                     }
                                     var exploreGenreMenu by remember { mutableStateOf(false) }
                                     var exploreYearMenu by remember { mutableStateOf(false) }
+                                    if (exploreCategory != "franchises") {
                                     Box(Modifier.fillMaxWidth()) {
                                         OutlinedButton(onClick = { exploreYearMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("Período: $exploreYearPeriod  ▾") }
                                         DropdownMenu(expanded = exploreYearMenu, onDismissRequest = { exploreYearMenu = false }) {
@@ -734,7 +749,56 @@ class MainActivity : ComponentActivity() {
                                             exploreGenres(exploreType).forEach { (name, _) -> DropdownMenuItem(text = { Text(name) }, onClick = { exploreGenre = name; exploreGenreMenu = false }) }
                                         }
                                     }
+                                    }
                                     Spacer(Modifier.height(8.dp))
+                                    if (exploreCategory == "franchises") {
+                                        if (selectedExploreFranchise == null) {
+                                            Text("UNIVERSOS CINEMATOGRÁFICOS", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
+                                            Text("Explore franquias", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                            Text("Conheça as sagas e descubra todos os filmes de cada universo.", color = Muted, fontSize = 12.sp)
+                                            if (exploreFranchisesLoading && exploreFranchises.isEmpty()) {
+                                                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Purple) }
+                                            } else if (exploreError.isNotBlank() && exploreFranchises.isEmpty()) {
+                                                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(exploreError, color = Muted) }
+                                            } else {
+                                                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                                    items(exploreFranchises, key = { "franchise-${it.id}" }) { franchise ->
+                                                        Card(onClick = { selectedExploreFranchise = franchise }, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
+                                                            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                                AsyncImage(model = franchise.backdropPath?.let { "https://image.tmdb.org/t/p/w342$it" } ?: franchise.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = franchise.name, modifier = Modifier.width(112.dp).height(76.dp).background(Night, RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
+                                                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                    Text(franchise.name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                                    Text("${franchise.parts.size} filmes", color = Muted, fontSize = 12.sp)
+                                                                    Text("Ver franquia  ›", color = Purple, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                TextButton(onClick = { selectedExploreFranchise = null }) { Text("‹ Franquias", color = Purple) }
+                                                Text(selectedExploreFranchise!!.name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                                            }
+                                            Text("FILMES EM ORDEM DE LANÇAMENTO", color = Muted, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp)
+                                            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                                                items(selectedExploreFranchise!!.parts.chunked(3), key = { row -> "franchise-films-${row.firstOrNull()?.id ?: 0}" }) { rowItems ->
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                                        rowItems.forEach { item ->
+                                                            val savedMedia = all.firstOrNull { it.tmdbId == item.id && it.mediaType == "movie" }
+                                                            ExploreMediaCard(item, savedMedia, Modifier.weight(1f)) {
+                                                                detailItem = item
+                                                                detailReturnPage = "Explorar"
+                                                                navigateTo("Detalhes")
+                                                            }
+                                                        }
+                                                        repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
                                     Text(when (exploreCategory) { "trending" -> "Em alta nesta semana"; "popular" -> "Os títulos mais populares"; "top_rated" -> "Os mais bem avaliados"; "recent" -> if (exploreType == "movie") "Em cartaz" else "Exibidos hoje"; else -> if (exploreType == "movie") "Próximos lançamentos" else "No ar" }, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     if (exploreLoading && exploreResults.isEmpty()) {
                                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Purple) }
@@ -767,6 +831,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                             if (exploreError.isNotBlank()) item { Text(exploreError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
                                         }
+                                    }
                                     }
                                 }
                             }
@@ -1141,8 +1206,91 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             "Minha lista" -> {
+                                if (filter == "Franquias") {
+                                    val franchiseGroups = all
+                                        .filter { it.mediaType == "movie" && it.franchiseId != null && it.franchiseId!! > 0 }
+                                        .groupBy { it.franchiseId!! }
+                                        .toList()
+                                        .sortedBy { entry -> entry.second.firstOrNull()?.franchiseName?.lowercase() ?: "" }
+                                    Text("FRANQUIAS DA MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(
+                                        "${franchiseGroups.size} franquias • somente títulos adicionados à sua coleção",
+                                        color = Muted,
+                                        fontSize = 11.sp
+                                    )
+                                    if (franchiseGroups.isEmpty()) {
+                                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                if (apiKey.isBlank()) "Configure o TMDB para identificar as franquias."
+                                                else "Ainda não identificamos franquias nos filmes da sua lista. A identificação é feita automaticamente pelo TMDB.",
+                                                color = Muted,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    } else {
+                                        LazyColumn(
+                                            Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                                            contentPadding = PaddingValues(vertical = 12.dp)
+                                        ) {
+                                            items(franchiseGroups, key = { it.first }) { group ->
+                                                val franchiseMovies = group.second.sortedWith(
+                                                    compareBy<MediaItem> { it.year.toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it.title }
+                                                )
+                                                Column(
+                                                    Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(12.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        franchiseMovies.firstOrNull()?.franchiseName?.takeIf { it.isNotBlank() } ?: "Franquia",
+                                                        color = TextMain,
+                                                        fontSize = 16.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        "${franchiseMovies.size} ${if (franchiseMovies.size == 1) "filme" else "filmes"} na sua lista • ordem de lançamento",
+                                                        color = Purple,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                        items(franchiseMovies, key = { it.id }) { media ->
+                                                            Column(
+                                                                Modifier.width(104.dp).clickable {
+                                                                    detailItem = TmdbResult(
+                                                                        media.tmdbId ?: 0,
+                                                                        media.title,
+                                                                        media.mediaType,
+                                                                        media.year,
+                                                                        media.posterPath,
+                                                                        media.overview,
+                                                                        media.releaseDate,
+                                                                        media.tmdbVoteAverage
+                                                                    )
+                                                                    detailReturnPage = "Minha lista"
+                                                                    detailSeasons = media.seasonProgress.ifBlank { "[]" }
+                                                                    navigateTo("Detalhes")
+                                                                },
+                                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                            ) {
+                                                                AsyncImage(
+                                                                    model = media.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
+                                                                    contentDescription = media.title,
+                                                                    modifier = Modifier.fillMaxWidth().height(148.dp).background(Night, RoundedCornerShape(8.dp)),
+                                                                    contentScale = ContentScale.Crop
+                                                                )
+                                                                Text(media.title, color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 2)
+                                                                Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 9.sp)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                                    items(listOf("Quero assistir", "Tô assistindo", "Já assisti")) { statusOption ->
+                                    items(listOf("Quero assistir", "Tô assistindo", "Já assisti", "Franquias")) { statusOption ->
                                         FilterChip(
                                             selected = filter == statusOption,
                                             onClick = { filter = statusOption },
@@ -1289,6 +1437,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
+                                }
                                 }
                             }
                             "Franquias" -> {
@@ -1643,14 +1792,14 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             NavigationBarItem(
-                                selected = page in listOf("Estatísticas", "Calendário", "Franquias", "Config."),
+                                selected = page in listOf("Estatísticas", "Calendário", "Config."),
                                 onClick = { moreMenu = true },
                                 icon = { Text("•••", color = Muted, fontSize = 18.sp) },
                                 label = { Text("Mais", fontSize = 9.sp) }
                             )
                             Box {
                                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                                    listOf("Estatísticas", "Calendário", "Franquias", "Config.").forEach { destination ->
+                                    listOf("Estatísticas", "Calendário", "Config.").forEach { destination ->
                                         DropdownMenuItem(text = { Text(destination) }, onClick = { navigateTo(destination); moreMenu = false })
                                     }
                                 }
