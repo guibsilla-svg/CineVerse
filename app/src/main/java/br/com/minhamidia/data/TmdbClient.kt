@@ -35,7 +35,7 @@ data class TmdbResult(
 }
 
 data class TmdbTrailer(val key: String, val name: String, val language: String)
-data class TmdbFranchise(val id: Int, val name: String, val overview: String, val parts: List<TmdbResult>)
+data class TmdbFranchise(val id: Int, val name: String, val overview: String, val parts: List<TmdbResult>, val posterPath: String? = null, val backdropPath: String? = null)
 data class TmdbCastMember(val id: Int, val name: String, val character: String, val profilePath: String?)
 
 data class TmdbShareCardDetails(
@@ -270,6 +270,19 @@ object TmdbClient {
         return franchiseCollection(collectionId, credential)
     }
 
+    // Coleções oficiais selecionadas para oferecer uma vitrine inicial variada em Explorar.
+    suspend fun featuredFranchises(credential: String): List<TmdbFranchise> = coroutineScope {
+        val collectionIds = listOf(
+            10, 1241, 119, 121938, 2344, 263, 86311, 9485, 328,
+            295, 8650, 87359, 1575, 10194, 2150, 86066, 404609, 131635
+        )
+        collectionIds.map { id ->
+            async { runCatching { franchiseCollection(id, credential) }.getOrNull() }
+        }.awaitAll().filterNotNull()
+            .filter { it.parts.isNotEmpty() }
+            .sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+    }
+
     suspend fun franchiseCollection(collectionId: Int, credential: String): TmdbFranchise? {
         if (collectionId <= 0) return null
         val collection = requestObject("/collection/$collectionId", credential, mapOf("language" to "pt-BR"))
@@ -298,7 +311,9 @@ object TmdbClient {
             id = collection.optInt("id", collectionId),
             name = collection.optString("name").ifBlank { "Franquia" },
             overview = collection.optString("overview"),
-            parts = titles
+            parts = titles,
+            posterPath = collection.optString("poster_path").takeIf { it.startsWith("/") } ?: titles.firstOrNull()?.posterPath,
+            backdropPath = collection.optString("backdrop_path").takeIf { it.startsWith("/") }
         )
     }
 
