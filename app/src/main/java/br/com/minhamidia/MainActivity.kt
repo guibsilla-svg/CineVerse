@@ -263,13 +263,6 @@ class MainActivity : ComponentActivity() {
                     page = destination
                 }
             }
-            fun returnFromDetails() {
-                val destination = detailReturnPage
-                if (pageHistory.lastOrNull() == destination) {
-                    pageHistory.removeAt(pageHistory.lastIndex)
-                }
-                page = destination
-            }
             var filter by remember { mutableStateOf("Quero assistir") }
             var categoryFilter by remember { mutableStateOf("FILMES") }
             var yearFilter by remember { mutableStateOf("Todos") }
@@ -285,6 +278,13 @@ class MainActivity : ComponentActivity() {
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
             var detailReturnPage by remember { mutableStateOf("Buscar") }
+            fun returnFromDetails() {
+                val destination = detailReturnPage
+                if (pageHistory.lastOrNull() == destination) {
+                    pageHistory.removeAt(pageHistory.lastIndex)
+                }
+                page = destination
+            }
             var detailSeasons by remember { mutableStateOf("[]") }
             var detailLoading by remember { mutableStateOf(false) }
             var detailRuntimeMinutes by remember { mutableStateOf<Int?>(null) }
