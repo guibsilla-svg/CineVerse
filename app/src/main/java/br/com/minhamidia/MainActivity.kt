@@ -453,8 +453,11 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(apiKey, all) {
                 if (apiKey.isNotBlank()) {
                     all.filter { it.mediaType == "movie" && it.tmdbId != null && it.franchiseId == null }.forEach { media ->
-                        val franchise = runCatching { TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey) }.getOrNull()
-                        dao.update(media.copy(franchiseId = franchise?.id ?: 0, franchiseName = franchise?.name.orEmpty()))
+                        val result = runCatching { TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey) }
+                        if (result.isSuccess) {
+                            val franchise = result.getOrNull()
+                            dao.update(media.copy(franchiseId = franchise?.id ?: 0, franchiseName = franchise?.name.orEmpty()))
+                        }
                     }
                 }
             }
