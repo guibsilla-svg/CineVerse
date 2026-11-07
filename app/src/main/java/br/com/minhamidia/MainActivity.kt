@@ -263,6 +263,13 @@ class MainActivity : ComponentActivity() {
                     page = destination
                 }
             }
+            fun returnFromDetails() {
+                val destination = detailReturnPage
+                if (pageHistory.lastOrNull() == destination) {
+                    pageHistory.removeAt(pageHistory.lastIndex)
+                }
+                page = destination
+            }
             var filter by remember { mutableStateOf("Quero assistir") }
             var categoryFilter by remember { mutableStateOf("FILMES") }
             var yearFilter by remember { mutableStateOf("Todos") }
@@ -424,10 +431,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = showKey || editingSeries != null || (page == "Minha lista" && filter == "Franquias") || (page == "Explorar" && exploreCategory == "franchises") || pageHistory.isNotEmpty()) {
+            BackHandler(enabled = showKey || editingSeries != null || page == "Detalhes" || (page == "Minha lista" && filter == "Franquias") || (page == "Explorar" && exploreCategory == "franchises") || pageHistory.isNotEmpty()) {
                 when {
                     showKey -> showKey = false
                     editingSeries != null -> editingSeries = null
+                    page == "Detalhes" -> returnFromDetails()
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
                     page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
                     page == "Explorar" && exploreCategory == "franchises" -> { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }
@@ -898,7 +906,7 @@ class MainActivity : ComponentActivity() {
                                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                                         item {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                TextButton(onClick = { page = if (pageHistory.isNotEmpty()) pageHistory.removeAt(pageHistory.lastIndex) else detailReturnPage }) { Text("← Voltar") }
+                                                TextButton(onClick = { returnFromDetails() }) { Text("← Voltar") }
                                                 Text("DETALHES", color = Purple, fontWeight = FontWeight.Bold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
