@@ -442,7 +442,12 @@ class MainActivity : ComponentActivity() {
             val franchiseIds = all.mapNotNull { it.franchiseId?.takeIf { id -> id > 0 } }.distinct().sorted()
             val franchiseIdsKey = franchiseIds.joinToString(",")
             val tmdbItemCount = all.count { it.tmdbId != null }
-            val franchiseScanCount = all.count { it.mediaType == "movie" && it.tmdbId != null }
+            val movieTmdbIdsKey = all.asSequence()
+                .filter { it.mediaType == "movie" && it.tmdbId != null }
+                .mapNotNull { it.tmdbId }
+                .distinct()
+                .sorted()
+                .joinToString(",")
             val tasteProfileKey = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
                 .joinToString("|") { "${it.id}:${it.mediaType}:${it.title}:${it.overview}:${it.genres}:${it.rating}" }
             LaunchedEffect(detailItem?.id, detailItem?.type, selectedPersonalRating) {
@@ -458,13 +463,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            LaunchedEffect(apiKey, franchiseScanCount) {
+            LaunchedEffect(apiKey, movieTmdbIdsKey) {
                 if (apiKey.isNotBlank()) {
-                    all.filter { it.mediaType == "movie" && it.tmdbId != null && it.franchiseId == null }.forEach { media ->
-                        val result = runCatching { TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey) }
-                        if (result.isSuccess) {
-                            val franchise = result.getOrNull()
-                            dao.update(media.copy(franchiseId = franchise?.id ?: 0, franchiseName = franchise?.name.orEmpty()))
+                    // Retry movies without a confirmed collection. Older versions stored 0
+                    // when no collection was found, which otherwise prevented future checks.
+                    all.filter {
+                        it.mediaType == "movie" && it.tmdbId != null && (it.franchiseId == null || it.franchiseId <= 0)
+                    }.forEach { media ->
+                        val franchise = runCatching {
+                            TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey)
+                        }.getOrNull()
+                        if (franchise != null && franchise.id > 0) {
+                            dao.update(media.copy(franchiseId = franchise.id, franchiseName = franchise.name))
                         }
                     }
                 }
