@@ -393,6 +393,8 @@ class MainActivity : ComponentActivity() {
             var exploreFranchises by remember { mutableStateOf(emptyList<TmdbFranchise>()) }
             var selectedExploreFranchise by remember { mutableStateOf<TmdbFranchise?>(null) }
             var exploreFranchisesLoading by remember { mutableStateOf(false) }
+            var exploreFranchisePage by remember { mutableStateOf(0) }
+            var exploreFranchisesCanLoadMore by remember { mutableStateOf(true) }
             val exploreListState = rememberLazyListState()
             val exploreFranchiseCatalogState = rememberLazyListState()
             val exploreFranchiseMoviesState = rememberLazyListState()
@@ -639,13 +641,17 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(page, exploreType, exploreCategory, exploreGenre, exploreYearPeriod, apiKey, exploreQuery) {
                 val catalogKey = "$exploreType|$exploreCategory|$exploreGenre|$exploreYearPeriod|$apiKey|${exploreQuery.trim()}"
-                if (page == "Explorar" && exploreQuery.isBlank() && exploreCategory == "franchises" && exploreFranchises.isEmpty() && !exploreFranchisesLoading) {
+                if (page == "Explorar" && exploreQuery.isBlank() && exploreCategory == "franchises" && exploreFranchisePage == 0 && !exploreFranchisesLoading) {
                     if (apiKey.isBlank()) exploreError = "Configure sua credencial TMDB em Mais > Config."
                     else {
                         exploreFranchisesLoading = true
                         exploreError = ""
-                        runCatching { TmdbClient.featuredFranchises(apiKey) }
-                            .onSuccess { exploreFranchises = it }
+                        runCatching { TmdbClient.discoverFranchises(1, apiKey) }
+                            .onSuccess { result ->
+                                exploreFranchises = result.franchises
+                                exploreFranchisePage = result.page
+                                exploreFranchisesCanLoadMore = result.page < result.totalPages
+                            }
                             .onFailure { exploreError = it.message ?: "Não foi possível carregar as franquias." }
                         exploreFranchisesLoading = false
                     }
@@ -766,7 +772,7 @@ class MainActivity : ComponentActivity() {
                                     Text(if (exploreQuery.isBlank()) "DESCUBRA MAIS" else "RESULTADOS DA BUSCA", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
                                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         listOf("Em alta" to "trending", "Populares" to "popular", "Mais bem avaliados" to "top_rated", "Recentes" to "recent", "Em breve" to "upcoming", "Franquias" to "franchises").forEach { (label, value) ->
-                                            FilterChip(selected = exploreCategory == value, onClick = { if (value == "franchises" && exploreCategory != "franchises") previousExploreCategory = exploreCategory; exploreCategory = value; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }, label = { Text(label, fontSize = 11.sp) })
+                                            FilterChip(selected = exploreCategory == value, onClick = { if (value == "franchises" && exploreCategory != "franchises") { previousExploreCategory = exploreCategory; exploreFranchises = emptyList(); exploreFranchisePage = 0; exploreFranchisesCanLoadMore = true }; exploreCategory = value; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }, label = { Text(label, fontSize = 11.sp) })
                                         }
                                     }
                                     var exploreGenreMenu by remember { mutableStateOf(false) }
@@ -811,6 +817,36 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                         }
+                                                    }
+                                                    item {
+                                                        if (exploreFranchisesCanLoadMore) {
+                                                            Button(
+                                                                onClick = {
+                                                                    if (!exploreFranchisesLoading) rouletteScope.launch {
+                                                                        exploreFranchisesLoading = true
+                                                                        exploreError = ""
+                                                                        val nextPage = exploreFranchisePage + 1
+                                                                        runCatching { TmdbClient.discoverFranchises(nextPage, apiKey) }
+                                                                            .onSuccess { result ->
+                                                                                exploreFranchises = (exploreFranchises + result.franchises).distinctBy { it.id }
+                                                                                exploreFranchisePage = result.page
+                                                                                exploreFranchisesCanLoadMore = result.page < result.totalPages
+                                                                            }
+                                                                            .onFailure { exploreError = it.message ?: "Não foi possível carregar mais franquias." }
+                                                                        exploreFranchisesLoading = false
+                                                                    }
+                                                                },
+                                                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                                                enabled = !exploreFranchisesLoading,
+                                                                colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                                                            ) {
+                                                                if (exploreFranchisesLoading) CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                                                                else Text("Carregar mais franquias", color = Color.White, fontWeight = FontWeight.Bold)
+                                                            }
+                                                        } else {
+                                                            Text("Você chegou ao fim das páginas disponíveis no TMDB.", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(12.dp))
+                                                        }
+                                                        if (exploreError.isNotBlank() && exploreFranchises.isNotEmpty()) Text(exploreError, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
                                                     }
                                                 }
                                             }
