@@ -445,7 +445,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = showKey || editingSeries != null || page != "Início" || pageHistory.isNotEmpty()) {
+            // Always consume Android Back, including at the home screen, so the app
+            // never exits accidentally. At the root with no previous destination, stay
+            // on Início instead of delegating Back to the system.
+            BackHandler(enabled = true) {
                 when {
                     showKey -> showKey = false
                     editingSeries != null -> editingSeries = null
@@ -459,6 +462,7 @@ class MainActivity : ComponentActivity() {
                     }
                     pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
                     page != "Início" -> page = "Início"
+                    else -> Unit
                 }
             }
             var seasonInput by remember { mutableStateOf("") }
