@@ -1278,7 +1278,16 @@ class MainActivity : ComponentActivity() {
                                     Text("Filmes relacionados, organizados pela ordem de lançamento.", color = Muted, fontSize = 11.sp)
                                     if (franchiseCollections.isEmpty()) {
                                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                            Text(if (apiKey.isBlank()) "Configure o TMDB para identificar as franquias." else "Identificando os universos dos seus filmes…", color = Muted, fontSize = 12.sp)
+                                            Text(
+                                                when {
+                                                    apiKey.isBlank() -> "Configure o TMDB para identificar as franquias."
+                                                    all.none { it.mediaType == "movie" && it.tmdbId != null } -> "Adicione filmes à sua coleção para descobrir franquias."
+                                                    all.any { it.mediaType == "movie" && it.tmdbId != null && it.franchiseId == null } -> "Identificando os universos dos seus filmes…"
+                                                    else -> "Nenhuma franquia foi identificada nos filmes da sua coleção."
+                                                },
+                                                color = Muted,
+                                                fontSize = 12.sp
+                                            )
                                         }
                                     } else {
                                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
@@ -1298,7 +1307,11 @@ class MainActivity : ComponentActivity() {
                                                                 AsyncImage(model = part.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = part.title, modifier = Modifier.fillMaxWidth().height(148.dp).background(Night, RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
                                                                 Text(part.title, color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 2)
                                                                 Text(part.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 9.sp)
-                                                                Text(if (saved == null) "NÃO ADICIONADO" else if (saved.status == "WATCHED") "JÁ ASSISTI" else "NA MINHA LISTA", color = if (saved == null) Muted else Purple, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                                                                Text(if (saved == null) "NÃO ADICIONADO" else when (saved.status) {
+                                                                    "WATCHED" -> "JÁ ASSISTI"
+                                                                    "WATCHING" -> "TÔ ASSISTINDO"
+                                                                    else -> "QUERO ASSISTIR"
+                                                                }, color = if (saved == null) Muted else Purple, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
                                                             }
                                                         }
                                                     }
@@ -1957,6 +1970,7 @@ private fun CompactMediaCard(media: MediaItem, modifier: Modifier = Modifier, on
         Text(media.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 2, minLines = 2)
         Text(media.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 10.sp, maxLines = 1)
         Text(tmdbRatingLabel(media.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        if (media.personalRating > 0) Text("SUA NOTA • ${media.personalRating}/10", color = Purple, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         TextButton(onClick = onRemove, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(30.dp)) { Text("Remover da lista", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
     }
 }
@@ -2004,6 +2018,7 @@ private fun MediaCard(media: MediaItem, favorite: Boolean, onFavorite: () -> Uni
                 Text(media.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("${if (media.mediaType == "tv") "Série" else "Filme"} • ${media.year}", color = Muted, fontSize = 12.sp)
                 Text(tmdbRatingLabel(media.tmdbVoteAverage), color = Color(0xFFFFD166), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (media.personalRating > 0) Text("SUA NOTA • ${media.personalRating}/10", color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 if (media.overview.isNotBlank()) Text(media.overview, color = Muted, fontSize = 12.sp, maxLines = 3, modifier = Modifier.padding(top = 4.dp))
                 TextButton(onClick = onFavorite, contentPadding = PaddingValues(0.dp)) { Text(if (favorite) "♥ Favorito" else "♡ Favoritar", color = Purple) }
             }
