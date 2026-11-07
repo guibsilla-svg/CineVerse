@@ -283,6 +283,8 @@ class MainActivity : ComponentActivity() {
             var detailRuntimeLoading by remember { mutableStateOf(false) }
             var detailTrailer by remember { mutableStateOf<br.com.minhamidia.data.TmdbTrailer?>(null) }
             var detailTrailerLoading by remember { mutableStateOf(false) }
+            var personalRatingInput by remember { mutableIntStateOf(0) }
+            var franchiseCollections by remember { mutableStateOf(emptyList<br.com.minhamidia.data.TmdbFranchise>()) }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendationsLoading by remember { mutableStateOf(false) }
@@ -434,6 +436,10 @@ class MainActivity : ComponentActivity() {
                     dao.update(movie.copy(status = "WATCHLIST"))
                 }
             }
+            LaunchedEffect(detailItem?.id, detailItem?.type, all) {
+                val selected = detailItem
+                personalRatingInput = if (selected == null) 0 else all.firstOrNull { it.tmdbId == selected.id && it.mediaType == selected.type }?.personalRating ?: 0
+            }
             LaunchedEffect(apiKey, all) {
                 if (apiKey.isNotBlank()) {
                     all.filter { it.tmdbId != null && it.tmdbVoteAverage <= 0.0 }.forEach { media ->
@@ -443,6 +449,20 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+            LaunchedEffect(apiKey, all) {
+                if (apiKey.isNotBlank()) {
+                    all.filter { it.mediaType == "movie" && it.tmdbId != null && it.franchiseId == null }.forEach { media ->
+                        val franchise = runCatching { TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey) }.getOrNull()
+                        dao.update(media.copy(franchiseId = franchise?.id ?: 0, franchiseName = franchise?.name.orEmpty()))
+                    }
+                }
+            }
+            LaunchedEffect(page, apiKey, all) {
+                if (page == "Franquias" && apiKey.isNotBlank()) {
+                    val ids = all.mapNotNull { it.franchiseId?.takeIf { id -> id > 0 } }.distinct()
+                    franchiseCollections = ids.mapNotNull { id -> runCatching { TmdbClient.franchiseCollection(id, apiKey) }.getOrNull() }
+                } else if (page != "Franquias") franchiseCollections = emptyList()
             }
 
             LaunchedEffect(apiKey, all, favorites, homeOrder) {
@@ -643,6 +663,7 @@ class MainActivity : ComponentActivity() {
                                     "Detalhes" -> "DETALHES"
                                     "Estatísticas" -> "ESTATÍSTICAS"
                                     "Calendário" -> "CALENDÁRIO"
+                                    "Franquias" -> "FRANQUIAS"
                                     "Roleta" -> "ROLETA"
                                     else -> "CONFIGURAÇÕES"
                                 },
@@ -998,6 +1019,15 @@ class MainActivity : ComponentActivity() {
                                                     }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                                                 }
                                             }
+                                            if (savedTitle != null) {
+                                                Divider(color = Muted.copy(alpha = .25f))
+                                                Text("SUA NOTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Text(if (personalRatingInput == 0) "Ainda não avaliado" else "$personalRatingInput/10", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                                                Slider(value = personalRatingInput.toFloat(), onValueChange = { personalRatingInput = it.toInt().coerceIn(0, 10) }, valueRange = 0f..10f, steps = 9, onValueChangeFinished = {
+                                                    lifecycleScope.launch { dao.update(savedTitle.copy(personalRating = personalRatingInput)) }
+                                                })
+                                                Text("Sua avaliação é privada e independente da nota TMDB.", color = Muted, fontSize = 10.sp)
+                                            }
                                             if (selectedTitle.type == "tv") {
                                                 Spacer(Modifier.height(8.dp))
                                                 Text("TEMPORADAS", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1233,6 +1263,42 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                     detailSeasons = fresh.toString()
                                                     detailLoading = false
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "Franquias" -> {
+                                Column(Modifier.weight(1f)) {
+                                    Text("UNIVERSOS DE FRANQUIAS", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("Filmes relacionados, organizados pela ordem de lançamento.", color = Muted, fontSize = 11.sp)
+                                    if (franchiseCollections.isEmpty()) {
+                                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                            Text(if (apiKey.isBlank()) "Configure o TMDB para identificar as franquias." else "Identificando os universos dos seus filmes…", color = Muted, fontSize = 12.sp)
+                                        }
+                                    } else {
+                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
+                                            items(franchiseCollections, key = { it.id }) { franchise ->
+                                                Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Text(franchise.name, color = TextMain, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                                    Text("${franchise.parts.size} filmes • ordem de lançamento", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    if (franchise.overview.isNotBlank()) Text(franchise.overview, color = Muted, fontSize = 11.sp, maxLines = 3)
+                                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                        items(franchise.parts, key = { it.id }) { part ->
+                                                            val saved = all.firstOrNull { it.tmdbId == part.id && it.mediaType == "movie" }
+                                                            Column(Modifier.width(104.dp).clickable {
+                                                                detailItem = part
+                                                                detailReturnPage = "Franquias"
+                                                                navigateTo("Detalhes")
+                                                            }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                AsyncImage(model = part.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }, contentDescription = part.title, modifier = Modifier.fillMaxWidth().height(148.dp).background(Night, RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                                                                Text(part.title, color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 2)
+                                                                Text(part.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 9.sp)
+                                                                Text(if (saved == null) "NÃO ADICIONADO" else if (saved.status == "WATCHED") "JÁ ASSISTI" else "NA MINHA LISTA", color = if (saved == null) Muted else Purple, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -1539,14 +1605,14 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             NavigationBarItem(
-                                selected = page in listOf("Estatísticas", "Calendário", "Config."),
+                                selected = page in listOf("Estatísticas", "Calendário", "Franquias", "Config."),
                                 onClick = { moreMenu = true },
                                 icon = { Text("•••", color = Muted, fontSize = 18.sp) },
                                 label = { Text("Mais", fontSize = 9.sp) }
                             )
                             Box {
                                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                                    listOf("Estatísticas", "Calendário", "Config.").forEach { destination ->
+                                    listOf("Estatísticas", "Calendário", "Franquias", "Config.").forEach { destination ->
                                         DropdownMenuItem(text = { Text(destination) }, onClick = { navigateTo(destination); moreMenu = false })
                                     }
                                 }
