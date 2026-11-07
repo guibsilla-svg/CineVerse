@@ -424,12 +424,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = showKey || editingSeries != null || (page == "Minha lista" && filter == "Franquias") || (page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null) || pageHistory.isNotEmpty()) {
+            BackHandler(enabled = showKey || editingSeries != null || (page == "Minha lista" && filter == "Franquias") || (page == "Explorar" && exploreCategory == "franchises") || pageHistory.isNotEmpty()) {
                 when {
                     showKey -> showKey = false
                     editingSeries != null -> editingSeries = null
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
                     page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
+                    page == "Explorar" && exploreCategory == "franchises" -> { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }
                     pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
                 }
             }
@@ -766,6 +767,9 @@ class MainActivity : ComponentActivity() {
                                     Spacer(Modifier.height(8.dp))
                                     if (exploreCategory == "franchises") {
                                         if (selectedExploreFranchise == null) {
+                                            TextButton(onClick = { exploreCategory = "trending"; selectedExploreFranchise = null; exploreCatalogLoadedKey = "" }) {
+                                                Text("‹ Voltar para Explorar", color = Purple)
+                                            }
                                             Text("UNIVERSOS CINEMATOGRÁFICOS", color = Purple, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
                                             Text("Explore franquias", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                             Text("Conheça as sagas e descubra todos os filmes de cada universo.", color = Muted, fontSize = 12.sp)
