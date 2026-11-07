@@ -601,6 +601,7 @@ class MainActivity : ComponentActivity() {
                 } else manualVisible
             }
             val posterBounds = remember { mutableStateMapOf<Long, Rect>() }
+            val latestVisibleIds by rememberUpdatedState(visible.map { it.id }.toSet())
             fun persistManualOrder(orderedIds: List<Long>) {
                 if (sortMode != "Manual" || orderedIds.isEmpty()) return
                 val orderedVisible = orderedIds.mapNotNull { id -> all.firstOrNull { it.id == id } }
@@ -1171,7 +1172,9 @@ class MainActivity : ComponentActivity() {
                                                                 change.consume()
                                                                 dragPointer += amount
                                                                 val targetId = posterBounds.entries.firstOrNull { entry ->
-                                                                    entry.key != media.id && entry.value.contains(dragPointer)
+                                                                    entry.key != media.id &&
+                                                                        entry.key in latestVisibleIds &&
+                                                                        entry.value.contains(dragPointer)
                                                                 }?.key
                                                                 if (targetId == null) {
                                                                     lastTargetId = null
