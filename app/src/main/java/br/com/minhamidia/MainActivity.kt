@@ -436,11 +436,19 @@ class MainActivity : ComponentActivity() {
                     dao.update(movie.copy(status = "WATCHLIST"))
                 }
             }
-            LaunchedEffect(detailItem?.id, detailItem?.type, all) {
-                val selected = detailItem
-                personalRatingInput = if (selected == null) 0 else all.firstOrNull { it.tmdbId == selected.id && it.mediaType == selected.type }?.personalRating ?: 0
+            val selectedPersonalRating = detailItem?.let { selected ->
+                all.firstOrNull { it.tmdbId == selected.id && it.mediaType == selected.type }?.personalRating
+            } ?: 0
+            val franchiseIds = all.mapNotNull { it.franchiseId?.takeIf { id -> id > 0 } }.distinct().sorted()
+            val franchiseIdsKey = franchiseIds.joinToString(",")
+            val tmdbItemCount = all.count { it.tmdbId != null }
+            val franchiseScanCount = all.count { it.mediaType == "movie" && it.tmdbId != null }
+            val tasteProfileKey = all.filter { it.rating >= 4 || favorites.contains(it.id.toString()) }
+                .joinToString("|") { "${it.id}:${it.mediaType}:${it.title}:${it.overview}:${it.genres}:${it.rating}" }
+            LaunchedEffect(detailItem?.id, detailItem?.type, selectedPersonalRating) {
+                personalRatingInput = selectedPersonalRating
             }
-            LaunchedEffect(apiKey, all) {
+            LaunchedEffect(apiKey, tmdbItemCount) {
                 if (apiKey.isNotBlank()) {
                     all.filter { it.tmdbId != null && it.tmdbVoteAverage <= 0.0 }.forEach { media ->
                         runCatching {
@@ -450,7 +458,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            LaunchedEffect(apiKey, all) {
+            LaunchedEffect(apiKey, franchiseScanCount) {
                 if (apiKey.isNotBlank()) {
                     all.filter { it.mediaType == "movie" && it.tmdbId != null && it.franchiseId == null }.forEach { media ->
                         val result = runCatching { TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey) }
@@ -461,14 +469,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            LaunchedEffect(page, apiKey, all) {
+            LaunchedEffect(page, apiKey, franchiseIdsKey) {
                 if (page == "Franquias" && apiKey.isNotBlank()) {
-                    val ids = all.mapNotNull { it.franchiseId?.takeIf { id -> id > 0 } }.distinct()
-                    franchiseCollections = ids.mapNotNull { id -> runCatching { TmdbClient.franchiseCollection(id, apiKey) }.getOrNull() }
+                    val loadedCollections = franchiseIds.mapNotNull { id ->
+                        runCatching { TmdbClient.franchiseCollection(id, apiKey) }.getOrNull()
+                    }
+                    franchiseCollections = loadedCollections
                 } else if (page != "Franquias") franchiseCollections = emptyList()
             }
 
-            LaunchedEffect(apiKey, all, favorites, homeOrder) {
+            LaunchedEffect(apiKey, tasteProfileKey, favorites, homeOrder) {
                 if (apiKey.isNotBlank()) {
                     recommendationsLoading = true
                     recommendationsError = ""
@@ -504,8 +514,7 @@ class MainActivity : ComponentActivity() {
                         recommendedMovies = decodeCache(cachedMovies)
                         recommendedShows = decodeCache(cachedShows)
                     } else {
-                        recommendedMovies = emptyList()
-                        recommendedShows = emptyList()
+                        // Keep the previous rows visible while refreshing to avoid a blank flash.
                         val movieResult = runCatching {
                             val trending = TmdbClient.trendingMovies(apiKey).filter { it.posterPath != null }
                             if (trending.isNotEmpty()) trending else TmdbClient.popularMovies(apiKey).filter { it.posterPath != null }

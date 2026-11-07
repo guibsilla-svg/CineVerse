@@ -1,4 +1,5 @@
 name: CineVerso Feature Validation
+# Validates isolated UI fixes before merging.
 
 on:
   push:
