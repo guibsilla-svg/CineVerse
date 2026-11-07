@@ -66,6 +66,10 @@ import br.com.minhamidia.data.TmdbResult
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.ensureActive
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -441,7 +445,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = showKey || editingSeries != null || page != "Início" || pageHistory.isNotEmpty()) {
+            // Always consume Android Back, including at the home screen, so the app
+            // never exits accidentally. At the root with no previous destination, stay
+            // on Início instead of delegating Back to the system.
+            BackHandler(enabled = true) {
                 when {
                     showKey -> showKey = false
                     editingSeries != null -> editingSeries = null
@@ -455,6 +462,7 @@ class MainActivity : ComponentActivity() {
                     }
                     pageHistory.isNotEmpty() -> page = pageHistory.removeAt(pageHistory.lastIndex)
                     page != "Início" -> page = "Início"
+                    else -> Unit
                 }
             }
             var seasonInput by remember { mutableStateOf("") }
@@ -497,17 +505,23 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(apiKey, movieTmdbIdsKey) {
                 if (apiKey.isNotBlank()) {
-                    // Retry movies without a confirmed collection. Older versions stored 0
-                    // when no collection was found, which otherwise prevented future checks.
-                    all.filter {
+                    // Identify missing collections concurrently, with a small limit to avoid
+                    // flooding TMDB and delaying the franchise suggestions screen.
+                    val pendingMovies = all.filter {
                         it.mediaType == "movie" && it.tmdbId != null && (it.franchiseId == null || it.franchiseId <= 0)
-                    }.forEach { media ->
-                        val franchise = runCatching {
-                            TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey)
-                        }.getOrNull()
-                        if (franchise != null && franchise.id > 0) {
-                            dao.update(media.copy(franchiseId = franchise.id, franchiseName = franchise.name))
-                        }
+                    }
+                    val semaphore = kotlinx.coroutines.sync.Semaphore(4)
+                    coroutineScope {
+                        pendingMovies.map { media ->
+                            async {
+                                val franchise = semaphore.withPermit {
+                                    runCatching { TmdbClient.franchiseForMovie(media.tmdbId!!, apiKey) }.getOrNull()
+                                }
+                                if (franchise != null && franchise.id > 0) {
+                                    dao.update(media.copy(franchiseId = franchise.id, franchiseName = franchise.name))
+                                }
+                            }
+                        }.awaitAll()
                     }
                 }
             }
@@ -519,13 +533,25 @@ class MainActivity : ComponentActivity() {
                     franchiseCollections = loadedCollections
                 } else if (page != "Franquias") franchiseCollections = emptyList()
             }
-            LaunchedEffect(page, filter, apiKey, franchiseIdsKey) {
-                if (page == "Minha lista" && filter == "Franquias" && apiKey.isNotBlank()) {
-                    myListFranchiseCollections = franchiseIds.mapNotNull { id ->
-                        runCatching { TmdbClient.franchiseCollection(id, apiKey) }.getOrNull()
+            LaunchedEffect(filter, apiKey, franchiseIdsKey) {
+                if (filter == "Franquias" && apiKey.isNotBlank()) {
+                    // Keep already loaded collections in memory when opening details.
+                    // Fetch only missing collections, concurrently, and merge without duplicates.
+                    val loadedIds = myListFranchiseCollections.map { it.id }.toSet()
+                    val missingIds = franchiseIds.filterNot { it in loadedIds }
+                    if (missingIds.isNotEmpty()) {
+                        val semaphore = kotlinx.coroutines.sync.Semaphore(4)
+                        val fetched = coroutineScope {
+                            missingIds.map { id ->
+                                async {
+                                    semaphore.withPermit {
+                                        runCatching { TmdbClient.franchiseCollection(id, apiKey) }.getOrNull()
+                                    }
+                                }
+                            }.awaitAll().filterNotNull()
+                        }
+                        myListFranchiseCollections = (myListFranchiseCollections + fetched).distinctBy { it.id }
                     }
-                } else if (page != "Minha lista" || filter != "Franquias") {
-                    myListFranchiseCollections = emptyList()
                 }
             }
 
