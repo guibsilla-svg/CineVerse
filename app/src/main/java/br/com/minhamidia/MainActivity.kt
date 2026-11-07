@@ -1442,6 +1442,9 @@ class MainActivity : ComponentActivity() {
                                     Text(updateMessage, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
                                 }
                                 Spacer(Modifier.height(8.dp))
+                                Text("BACKUP AUTOMÁTICO", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("O Android pode salvar automaticamente a coleção, o progresso e as avaliações na conta Google quando o backup do aparelho estiver ativado. Ao reinstalar o CineVerso, os dados podem ser restaurados usando a mesma conta. Não há cobrança nem servidor próprio; a execução depende das configurações e da disponibilidade do backup do Android.", color = Muted, fontSize = 12.sp)
+                                Divider(color = Muted.copy(alpha = .25f))
                                 Text("ACESSO OFFLINE", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("Sua coleção, avaliações, favoritos e progresso ficam salvos localmente. Esses dados continuam disponíveis sem internet; novas buscas, pôsteres não armazenados e atualizações do catálogo exigem conexão.", color = Muted, fontSize = 12.sp)
                                 Divider(color = Muted.copy(alpha = .25f))
@@ -1457,7 +1460,7 @@ class MainActivity : ComponentActivity() {
                                 Text("Ao gerar uma indicação, o CineVerso permite escolher primeiro um banner horizontal no Google Imagens e depois três capturas reais de cenas. As imagens selecionadas são usadas temporariamente na composição; não são adicionadas à galeria nem substituídas por pôsteres ou artes promocionais.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 OutlinedButton(onClick = {
                                     val json = JSONArray()
-                                    all.forEach { m -> json.put(JSONObject().put("title", m.title).put("tmdbId", m.tmdbId).put("mediaType", m.mediaType).put("year", m.year).put("posterPath", m.posterPath).put("overview", m.overview).put("status", m.status).put("rating", m.rating).put("watchedAt", m.watchedAt).put("runtimeMinutes", m.runtimeMinutes).put("genres", m.genres).put("totalSeasons", m.totalSeasons).put("watchedEpisodes", m.watchedEpisodes).put("totalEpisodes", m.totalEpisodes).put("releaseDate", m.releaseDate)) }
+                                    all.forEach { m -> json.put(JSONObject().put("title", m.title).put("tmdbId", m.tmdbId).put("mediaType", m.mediaType).put("year", m.year).put("posterPath", m.posterPath).put("overview", m.overview).put("status", m.status).put("rating", m.rating).put("watchedAt", m.watchedAt).put("runtimeMinutes", m.runtimeMinutes).put("genres", m.genres).put("totalSeasons", m.totalSeasons).put("watchedEpisodes", m.watchedEpisodes).put("totalEpisodes", m.totalEpisodes).put("releaseDate", m.releaseDate).put("seasonProgress", m.seasonProgress).put("sortOrder", m.sortOrder).put("tmdbVoteAverage", m.tmdbVoteAverage).put("personalRating", m.personalRating).put("franchiseId", m.franchiseId).put("franchiseName", m.franchiseName)) }
                                     val send = Intent(Intent.ACTION_SEND).apply { type = "application/json"; putExtra(Intent.EXTRA_SUBJECT, "Backup CineVerso"); putExtra(Intent.EXTRA_TEXT, json.toString(2)) }
                                     startActivity(Intent.createChooser(send, "Exportar backup CineVerso"))
                                 }, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup JSON") }
