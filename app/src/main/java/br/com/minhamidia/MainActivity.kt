@@ -270,6 +270,10 @@ class MainActivity : ComponentActivity() {
             var detailCast by remember { mutableStateOf(emptyList<br.com.minhamidia.data.TmdbCastMember>()) }
             var detailCastLoading by remember { mutableStateOf(false) }
             var sortMode by remember { mutableStateOf("Manual") }
+            var draggedPosterId by remember { mutableStateOf<Long?>(null) }
+            var dragOrder by remember { mutableStateOf<List<Long>>(emptyList()) }
+            var dragPointer by remember { mutableStateOf(Offset.Zero) }
+            val latestDragOrder by rememberUpdatedState(dragOrder)
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
             var detailReturnPage by remember { mutableStateOf("Buscar") }
@@ -585,34 +589,35 @@ class MainActivity : ComponentActivity() {
                 }
                 (yearFilter == "Todos" || media.year == yearFilter) && categoryMatches && statusMatches
             }
+            val manualVisible = visibleUnsorted.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id })
             val visible = when (sortMode) {
                 "A–Z" -> visibleUnsorted.sortedBy { it.title.lowercase(java.util.Locale.ROOT) }
                 "Ano (mais recente)" -> visibleUnsorted.sortedByDescending { it.year.toIntOrNull() ?: 0 }
                 "Inclusão (mais recente)" -> visibleUnsorted.sortedByDescending { it.id }
                 "Inclusão (mais antiga)" -> visibleUnsorted.sortedBy { it.id }
-                else -> visibleUnsorted.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id })
+                else -> if (draggedPosterId != null && dragOrder.isNotEmpty()) {
+                    val byId = manualVisible.associateBy { it.id }
+                    dragOrder.mapNotNull { byId[it] } + manualVisible.filter { it.id !in dragOrder }
+                } else manualVisible
             }
             val posterBounds = remember { mutableStateMapOf<Long, Rect>() }
-            var draggedPosterId by remember { mutableStateOf<Long?>(null) }
-            var dragPointer by remember { mutableStateOf(Offset.Zero) }
-            fun moveManualPoster(fromId: Long, toId: Long) {
-                if (fromId == toId || sortMode != "Manual") return
-                val visibleIds = visible.map { it.id }.toSet()
-                val reorderedVisible = visible.toMutableList()
-                val fromIndex = reorderedVisible.indexOfFirst { it.id == fromId }
-                val toIndex = reorderedVisible.indexOfFirst { it.id == toId }
-                if (fromIndex < 0 || toIndex < 0) return
-                val moved = reorderedVisible.removeAt(fromIndex)
-                reorderedVisible.add(toIndex, moved)
+            fun persistManualOrder(orderedIds: List<Long>) {
+                if (sortMode != "Manual" || orderedIds.isEmpty()) return
+                val orderedVisible = orderedIds.mapNotNull { id -> all.firstOrNull { it.id == id } }
+                val visibleIds = orderedVisible.map { it.id }.toSet()
+                if (orderedVisible.size != visibleIds.size) return
                 val completeOrder = all.sortedWith(compareBy<MediaItem> { if (it.sortOrder > 0) it.sortOrder else it.id }.thenBy { it.id }).toMutableList()
                 var nextVisible = 0
                 for (index in completeOrder.indices) {
                     if (completeOrder[index].id in visibleIds) {
-                        completeOrder[index] = reorderedVisible[nextVisible++]
+                        if (nextVisible >= orderedVisible.size) return
+                        completeOrder[index] = orderedVisible[nextVisible++]
                     }
                 }
                 lifecycleScope.launch {
-                    completeOrder.forEachIndexed { index, item -> dao.update(item.copy(sortOrder = (index + 1L) * 1000L)) }
+                    completeOrder.forEachIndexed { index, item ->
+                        dao.update(item.copy(sortOrder = (index + 1L) * 1000L))
+                    }
                 }
             }
             MaterialTheme(colorScheme = darkColorScheme(primary = palette.third, background = palette.first, surface = palette.second, onBackground = TextMain, onSurface = TextMain)) {
@@ -1143,20 +1148,45 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 .pointerInput(media.id, sortMode) {
                                                     if (sortMode == "Manual") {
+                                                        var lastTargetId: Long? = null
                                                         detectDragGesturesAfterLongPress(
                                                             onDragStart = {
                                                                 draggedPosterId = media.id
+                                                                dragOrder = visible.map { it.id }
                                                                 dragPointer = posterBounds[media.id]?.center ?: it
+                                                                lastTargetId = null
                                                             },
-                                                            onDragEnd = { draggedPosterId = null },
-                                                            onDragCancel = { draggedPosterId = null },
+                                                            onDragEnd = {
+                                                                persistManualOrder(latestDragOrder)
+                                                                draggedPosterId = null
+                                                                dragOrder = emptyList()
+                                                                lastTargetId = null
+                                                            },
+                                                            onDragCancel = {
+                                                                draggedPosterId = null
+                                                                dragOrder = emptyList()
+                                                                lastTargetId = null
+                                                            },
                                                             onDrag = { change, amount ->
                                                                 change.consume()
                                                                 dragPointer += amount
                                                                 val targetId = posterBounds.entries.firstOrNull { entry ->
                                                                     entry.key != media.id && entry.value.contains(dragPointer)
                                                                 }?.key
-                                                                if (targetId != null) moveManualPoster(media.id, targetId)
+                                                                if (targetId == null) {
+                                                                    lastTargetId = null
+                                                                } else if (targetId != lastTargetId) {
+                                                                    lastTargetId = targetId
+                                                                    val currentOrder = latestDragOrder
+                                                                    val fromIndex = currentOrder.indexOf(media.id)
+                                                                    val toIndex = currentOrder.indexOf(targetId)
+                                                                    if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex) {
+                                                                        val updatedOrder = currentOrder.toMutableList()
+                                                                        val movingId = updatedOrder.removeAt(fromIndex)
+                                                                        updatedOrder.add(toIndex, movingId)
+                                                                        dragOrder = updatedOrder
+                                                                    }
+                                                                }
                                                             }
                                                         )
                                                     }
