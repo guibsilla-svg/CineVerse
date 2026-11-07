@@ -256,9 +256,11 @@ class MainActivity : ComponentActivity() {
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
+            var detailReturnPage by remember { mutableStateOf("Buscar") }
             val pageHistory = remember { mutableStateListOf<String>() }
             fun navigateTo(destination: String) {
                 if (destination != page) {
+                    if (destination == "Detalhes") detailReturnPage = page
                     pageHistory.add(page)
                     page = destination
                 }
@@ -277,7 +279,6 @@ class MainActivity : ComponentActivity() {
             val latestDragOrder by rememberUpdatedState(dragOrder)
             var results by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var detailItem by remember { mutableStateOf<TmdbResult?>(null) }
-            var detailReturnPage by remember { mutableStateOf("Buscar") }
             fun returnFromDetails() {
                 val destination = detailReturnPage
                 if (pageHistory.lastOrNull() == destination) {
