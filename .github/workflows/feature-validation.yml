@@ -3,7 +3,7 @@ name: CineVerso Feature Validation
 
 on:
   push:
-    branches: [ feature/franquias-notas-backup, fix/screen-flicker, fix/franchise-detection, feature/franchises-in-my-list, fix/franchise-navigation-and-suggestions ]
+    branches: [ feature/franquias-notas-backup, fix/screen-flicker, fix/franchise-detection, feature/franchises-in-my-list, fix/franchise-navigation-and-suggestions, fix/global-back-navigation-scroll ]
 
 permissions:
   contents: read
