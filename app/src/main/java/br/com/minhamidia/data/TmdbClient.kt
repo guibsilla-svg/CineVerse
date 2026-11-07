@@ -293,17 +293,18 @@ object TmdbClient {
                 array.optJSONObject(index)?.optInt("id")?.takeIf { it > 0 }
             }
         }.orEmpty()
-        val franchises = movieIds.map { movieId ->
+        val collectionIds = movieIds.map { movieId ->
             async {
                 runCatching {
-                    val details = requestObject("/movie/$movieId", credential, mapOf("language" to "pt-BR"))
-                    val collectionId = details.optJSONObject("belongs_to_collection")?.optInt("id") ?: 0
-                    if (collectionId > 0) franchiseCollection(collectionId, credential) else null
+                    requestObject("/movie/$movieId", credential, mapOf("language" to "pt-BR"))
+                        .optJSONObject("belongs_to_collection")?.optInt("id")?.takeIf { it > 0 }
                 }.getOrNull()
             }
+        }.awaitAll().filterNotNull().distinct()
+        val franchises = collectionIds.map { collectionId ->
+            async { runCatching { franchiseCollection(collectionId, credential) }.getOrNull() }
         }.awaitAll().filterNotNull()
             .filter { it.parts.isNotEmpty() }
-            .distinctBy { it.id }
             .sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
         TmdbFranchisePage(franchises, safePage, totalPages)
     }
