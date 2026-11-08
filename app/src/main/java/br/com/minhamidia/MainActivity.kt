@@ -1505,7 +1505,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
-                                }
+                                } else {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                                     items(listOf("Quero assistir", "Tô assistindo", "Já assisti", "Franquias")) { statusOption ->
                                         FilterChip(
