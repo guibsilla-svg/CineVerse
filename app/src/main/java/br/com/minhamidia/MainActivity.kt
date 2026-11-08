@@ -1427,7 +1427,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     }
                                                     Text(
-                                                        "\${franchiseParts.size} filmes lançados • ordem de lançamento",
+                                                        "${franchiseParts.size} filmes lançados • ordem de lançamento",
                                                         color = Purple,
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold
