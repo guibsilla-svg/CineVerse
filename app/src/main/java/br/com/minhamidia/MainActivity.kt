@@ -903,7 +903,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                         val visibleGames = gamesRemote.filter { game ->
-                                            (gamesPlatform == "Todos" || game.platforms.contains("PlayStation $gamesPlatform", ignoreCase = true)) &&
+                                            (gamesPlatform == "Todos" || game.platforms.contains(if (gamesPlatform == "PS5") "PlayStation 5" else "PlayStation 4", ignoreCase = true)) &&
                                                 (gamesGenre == "Todos" || game.genres.split(", ").contains(gamesGenre))
                                         }
                                         Text("JOGOS COMPATÍVEIS COM PS5", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
