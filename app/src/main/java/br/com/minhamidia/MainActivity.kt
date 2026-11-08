@@ -464,7 +464,16 @@ class MainActivity : ComponentActivity() {
                     editingSeries != null -> editingSeries = null
                     page == "Detalhes" -> returnFromDetails()
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
-                    page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
+                    // The selected franchise is a nested screen inside Explore.
+                    // Handle it independently of the current category/page snapshot so
+                    // Android Back always returns to the franchise catalog first.
+                    selectedExploreFranchise != null -> {
+                        selectedExploreFranchise = null
+                        if (page != "Explorar") {
+                            pageHistory.removeAll { it == "Explorar" }
+                            page = "Explorar"
+                        }
+                    }
                     page == "Explorar" && exploreCategory == "franchises" -> {
                         exploreCategory = previousExploreCategory
                         selectedExploreFranchise = null
@@ -733,7 +742,10 @@ class MainActivity : ComponentActivity() {
                     dragOrder.mapNotNull { byId[it] } + manualVisible.filter { it.id !in dragOrder }
                 } else manualVisible
             }
-            val posterBounds = remember { mutableStateMapOf<Long, Rect>() }
+            // Layout callbacks and drag gestures run on the UI thread. A plain remembered
+            // map avoids scheduling a Compose snapshot write after every poster layout
+            // pass, which can otherwise cause unnecessary snapshot invalidations.
+            val posterBounds = remember { mutableMapOf<Long, Rect>() }
             val latestVisibleIds by rememberUpdatedState(visible.map { it.id }.toSet())
             fun persistManualOrder(orderedIds: List<Long>) {
                 if (sortMode != "Manual" || orderedIds.isEmpty()) return
