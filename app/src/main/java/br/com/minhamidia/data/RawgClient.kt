@@ -29,6 +29,7 @@ data class RawgGame(
 object RawgClient {
     // RAWG platform IDs: PlayStation 4 = 18; PlayStation 5 = 187.
     private const val PLAYSTATION_PLATFORMS = "18,187"
+    private val ps4OnlyExceptions = setOf("afro samurai 2 revenge of kuma volume one", "just deal with it!", "robinson: the journey", "we sing", "hitman go: definitive edition", "shadwen")
 
     private suspend fun get(path: String, apiKey: String): JSONObject = withContext(Dispatchers.IO) {
         require(apiKey.isNotBlank()) { "Configure sua chave RAWG em Mais > Configurações." }
@@ -97,7 +98,7 @@ object RawgClient {
         val results = response.optJSONArray("results") ?: return emptyList()
         return (0 until results.length()).mapNotNull { index ->
             results.optJSONObject(index)?.let(::parse)
-        }.filter { it.id > 0 && it.name.isNotBlank() && it.backgroundImage.isNotBlank() }
+        }.filter { it.id > 0 && it.name.isNotBlank() && it.backgroundImage.isNotBlank() && it.name.trim().lowercase() !in ps4OnlyExceptions }
     }
 
     suspend fun details(id: Int, apiKey: String): RawgGame {
