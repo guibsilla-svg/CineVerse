@@ -60,6 +60,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import br.com.minhamidia.data.AppDatabase
 import br.com.minhamidia.data.MediaItem
+import br.com.minhamidia.data.GameItem
+import br.com.minhamidia.data.RawgClient
 import br.com.minhamidia.data.TmdbClient
 import br.com.minhamidia.data.TmdbFranchise
 import br.com.minhamidia.data.TmdbResult
@@ -238,6 +240,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val dao = AppDatabase.get(this).mediaDao()
+        val gameDao = AppDatabase.get(this).gameDao()
         val prefs = getSharedPreferences("cineverse_settings", MODE_PRIVATE)
         val alertWork = PeriodicWorkRequestBuilder<EpisodeAlertWorker>(12, TimeUnit.HOURS)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -289,6 +292,16 @@ class MainActivity : ComponentActivity() {
             var homeOrder by remember { mutableStateOf(prefs.getString("home_order", "Padrão") ?: "Padrão") }
             var featuredTitle by remember { mutableStateOf(prefs.getString("featured_title", "") ?: "") }
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
+            var rawgKey by remember { mutableStateOf(prefs.getString("rawg_key", "") ?: "") }
+            var gamesQuery by remember { mutableStateOf("") }
+            var gamesCategory by remember { mutableStateOf("Em alta") }
+            var gamesSection by remember { mutableStateOf("Descobrir") }
+            var gamesRemote by remember { mutableStateOf(emptyList<br.com.minhamidia.data.RawgGame>()) }
+            var gamesLoading by remember { mutableStateOf(false) }
+            var gamesError by remember { mutableStateOf("") }
+            var selectedGame by remember { mutableStateOf<GameItem?>(null) }
+            var gameDetailLoading by remember { mutableStateOf(false) }
+            var showRawgKey by remember { mutableStateOf(false) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
             var detailReturnPage by remember { mutableStateOf("Explorar") }
@@ -492,6 +505,8 @@ class MainActivity : ComponentActivity() {
             BackHandler(enabled = true) {
                 when {
                     showKey -> showKey = false
+                    showRawgKey -> showRawgKey = false
+                    selectedGame != null -> selectedGame = null
                     editingSeries != null -> editingSeries = null
                     page == "Detalhes" -> returnFromDetails()
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
@@ -520,6 +535,7 @@ class MainActivity : ComponentActivity() {
             var seasonProgressInput by remember { mutableStateOf("") }
             var favorites by remember { mutableStateOf(prefs.getStringSet("favorites", emptySet())?.toSet() ?: emptySet()) }
             val all by dao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+            val savedGames by gameDao.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
             LaunchedEffect(all) {
                 all.filter { it.mediaType == "movie" && it.status == "WATCHING" }.forEach { movie ->
                     dao.update(movie.copy(status = "WATCHLIST"))
@@ -746,6 +762,33 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+            LaunchedEffect(page, rawgKey, gamesQuery, gamesCategory, gamesSection) {
+                if (page == "Games" && gamesSection == "Descobrir") {
+                    if (rawgKey.isBlank()) {
+                        gamesRemote = emptyList()
+                        gamesError = "Configure sua chave gratuita da RAWG em Mais > Config. para acessar o catálogo PlayStation."
+                    } else {
+                        kotlinx.coroutines.delay(350)
+                        gamesLoading = true
+                        gamesError = ""
+                        runCatching { RawgClient.catalog(rawgKey, gamesCategory, gamesQuery) }
+                            .onSuccess { gamesRemote = it }
+                            .onFailure { gamesError = it.message ?: "Não foi possível carregar os jogos." }
+                        gamesLoading = false
+                    }
+                }
+            }
+            LaunchedEffect(selectedGame?.rawgId, rawgKey) {
+                val selected = selectedGame
+                if (selected != null && selected.overview.isBlank() && rawgKey.isNotBlank()) {
+                    gameDetailLoading = true
+                    val details = runCatching { RawgClient.details(selected.rawgId, rawgKey) }.getOrNull()
+                    if (details != null && selectedGame?.rawgId == selected.rawgId) {
+                        selectedGame = details.toEntity().copy(addedAt = selected.addedAt, status = selected.status)
+                    }
+                    gameDetailLoading = false
+                }
+            }
             val availableYears = all.mapNotNull { it.year.toIntOrNull() }.distinct().sortedDescending()
             val visibleUnsorted = all.filter { media ->
                 val categoryMatches = when (categoryFilter) {
@@ -812,6 +855,7 @@ class MainActivity : ComponentActivity() {
                                 when (page) {
                                     "Início" -> "INÍCIO"
                                     "Explorar" -> "EXPLORAR"
+                                    "Games" -> "PLAYSTATION GAMES"
                                     "Buscar" -> "BUSCAR"
                                     "Minha lista" -> "MINHA LISTA"
                                     "Detalhes" -> "DETALHES"
@@ -826,6 +870,75 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         when (page) {
+                            "Games" -> {
+                                Column(Modifier.weight(1f)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilterChip(selected = gamesSection == "Descobrir", onClick = { gamesSection = "Descobrir" }, label = { Text("Descobrir") })
+                                        FilterChip(selected = gamesSection == "Quero Jogar", onClick = { gamesSection = "Quero Jogar" }, label = { Text("Quero Jogar (${savedGames.size})") })
+                                    }
+                                    if (gamesSection == "Descobrir") {
+                                        OutlinedTextField(
+                                            value = gamesQuery, onValueChange = { gamesQuery = it },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            placeholder = { Text("Buscar jogos de PlayStation") },
+                                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                            singleLine = true, shape = RoundedCornerShape(14.dp)
+                                        )
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            listOf("Em alta", "Mais bem avaliados", "Lançamentos").forEach { category ->
+                                                FilterChip(selected = gamesCategory == category, onClick = { gamesCategory = category }, label = { Text(category, fontSize = 10.sp) })
+                                            }
+                                        }
+                                        Text("JOGOS PARA PS5", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                        Text("PS5 e títulos de PS4 compatíveis com PS5", color = Muted, fontSize = 11.sp)
+                                        if (gamesLoading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Purple)
+                                        if (gamesError.isNotBlank()) Text(gamesError, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
+                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                            items(gamesRemote, key = { it.id }) { game ->
+                                                val saved = savedGames.any { it.rawgId == game.id }
+                                                Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).clickable {
+                                                    selectedGame = game.toEntity()
+                                                }.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    AsyncImage(model = game.backgroundImage, contentDescription = game.name, modifier = Modifier.width(92.dp).height(112.dp), contentScale = ContentScale.Crop)
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Text(game.name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2)
+                                                        Text(game.year.ifBlank { "Lançamento não informado" }, color = Muted, fontSize = 10.sp)
+                                                        Text(game.platforms.ifBlank { "PlayStation 4 / PlayStation 5" }, color = Muted, fontSize = 9.sp, maxLines = 2)
+                                                        if (game.rating > 0) Text("★ ${"%.1f".format(java.util.Locale.US, game.rating)} / 5", color = Color(0xFFFFD166), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        TextButton(onClick = { lifecycleScope.launch { if (!saved) gameDao.insert(game.toEntity()) else gameDao.deleteByRawgId(game.id) } }, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(28.dp)) {
+                                                            Text(if (saved) "✓ NA QUERO JOGAR" else "+ QUERO JOGAR", color = Purple, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (!gamesLoading && gamesRemote.isEmpty() && gamesError.isBlank()) item { Text("Nenhum jogo encontrado com essa busca.", color = Muted, fontSize = 12.sp) }
+                                        }
+                                    } else {
+                                        Text("SUA LISTA DE JOGOS", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                        if (savedGames.isEmpty()) {
+                                            Text("Os jogos adicionados em Quero Jogar aparecerão aqui.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 18.dp))
+                                        }
+                                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                            items(savedGames, key = { it.rawgId }) { game ->
+                                                Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).clickable { selectedGame = game }.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    AsyncImage(model = game.backgroundImage, contentDescription = game.name, modifier = Modifier.width(92.dp).height(112.dp), contentScale = ContentScale.Crop)
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                        Text(game.name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                        Text(game.year.ifBlank { "Ano não informado" }, color = Muted, fontSize = 10.sp)
+                                                        Text(game.platforms.ifBlank { "PlayStation 4 / PlayStation 5" }, color = Muted, fontSize = 9.sp)
+                                                        TextButton(onClick = { lifecycleScope.launch { gameDao.deleteByRawgId(game.rawgId) } }, contentPadding = PaddingValues(0.dp), modifier = Modifier.height(28.dp)) { Text("Remover", color = Muted, fontSize = 10.sp) }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text("Catálogo fornecido por RAWG", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 4.dp).clickable {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://rawg.io")))
+                                    })
+                                }
+                            }
                             "Explorar" -> {
                                 Column(Modifier.weight(1f)) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1896,6 +2009,11 @@ class MainActivity : ComponentActivity() {
                                 Text("INTEGRAÇÃO TMDB", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text("A chave fica salva neste aparelho e é usada para buscar títulos, sinopses, pôsteres e avaliações.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 Button(onClick = { showKey = true }, modifier = Modifier.fillMaxWidth()) { Text(if (apiKey.isBlank()) "Configurar chave TMDB" else "Alterar chave TMDB") }
+                                Divider(color = Muted.copy(alpha = .25f))
+                                Text("CATÁLOGO DE GAMES PLAYSTATION", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("A chave RAWG é gratuita para uso pessoal e fica salva somente neste aparelho. O catálogo é limitado a jogos de PS5 e PS4, excluindo títulos identificados como incompatíveis com PS5.", color = Muted, fontSize = 12.sp)
+                                Button(onClick = { showRawgKey = true }, modifier = Modifier.fillMaxWidth()) { Text(if (rawgKey.isBlank()) "Configurar chave RAWG" else "Alterar chave RAWG") }
+                                OutlinedButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://rawg.io/apidocs"))) }, modifier = Modifier.fillMaxWidth()) { Text("Obter chave gratuita na RAWG") }
                                 Spacer(Modifier.height(8.dp))
                                 Divider(color = Muted.copy(alpha = .25f))
                                 Text("TRÊS CENAS PARA SUA INDICAÇÃO", color = palette.third, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -2029,7 +2147,7 @@ class MainActivity : ComponentActivity() {
                             tonalElevation = 0.dp
                         ) {
                             var moreMenu by remember { mutableStateOf(false) }
-                            listOf("Início", "Explorar", "Minha lista").forEach { destination ->
+                            listOf("Início", "Explorar", "Games", "Minha lista").forEach { destination ->
                                 NavigationBarItem(
                                     selected = page == destination,
                                     onClick = { navigateTo(destination) },
@@ -2038,6 +2156,7 @@ class MainActivity : ComponentActivity() {
                                             when (destination) {
                                                 "Início" -> "⌂"
                                                 "Explorar" -> "✦"
+                                                "Games" -> "🎮"
                                                 else -> "▣"
                                             },
                                             fontSize = 20.sp,
@@ -2283,6 +2402,56 @@ class MainActivity : ComponentActivity() {
                             editingSeries = null
                         }) { Text("Salvar") } },
                         dismissButton = { TextButton(onClick = { editingSeries = null }) { Text("Cancelar") } })
+                }
+                if (showRawgKey) {
+                    AlertDialog(
+                        onDismissRequest = { showRawgKey = false },
+                        title = { Text("Chave da API RAWG") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Crie uma chave gratuita em rawg.io/apidocs e cole abaixo. Ela será armazenada apenas neste aparelho.")
+                                OutlinedTextField(value = rawgKey, onValueChange = { rawgKey = it.trim() }, label = { Text("API Key RAWG") }, singleLine = true)
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                prefs.edit().putString("rawg_key", rawgKey.trim()).apply()
+                                showRawgKey = false
+                                gamesError = ""
+                            }) { Text("Salvar") }
+                        },
+                        dismissButton = { TextButton(onClick = { showRawgKey = false }) { Text("Cancelar") } }
+                    )
+                }
+                if (selectedGame != null) {
+                    val game = selectedGame!!
+                    val isSaved = savedGames.any { it.rawgId == game.rawgId }
+                    AlertDialog(
+                        onDismissRequest = { selectedGame = null },
+                        title = { Text(game.name, color = TextMain, fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                AsyncImage(model = game.backgroundImage, contentDescription = game.name, modifier = Modifier.fillMaxWidth().height(170.dp), contentScale = ContentScale.Crop)
+                                Text("Lançamento: ${game.released.ifBlank { "Não informado" }}", color = Muted, fontSize = 11.sp)
+                                Text("Plataformas: ${game.platforms.ifBlank { "PS4 / PS5" }}", color = Muted, fontSize = 11.sp)
+                                if (game.genres.isNotBlank()) Text("Gêneros: ${game.genres}", color = Muted, fontSize = 11.sp)
+                                if (game.rating > 0) Text("Avaliação RAWG: ${"%.1f".format(java.util.Locale.US, game.rating)} / 5", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                if (gameDetailLoading) CircularProgressIndicator(Modifier.size(20.dp), color = Purple)
+                                Text(game.overview.ifBlank { "Sinopse indisponível." }, color = TextMain, fontSize = 12.sp)
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                lifecycleScope.launch {
+                                    if (isSaved) gameDao.deleteByRawgId(game.rawgId)
+                                    else gameDao.insert(game.copy(status = "WANT_TO_PLAY"))
+                                }
+                                selectedGame = null
+                            }) { Text(if (isSaved) "Remover da lista" else "Quero Jogar") }
+                        },
+                        dismissButton = { TextButton(onClick = { selectedGame = null }) { Text("Fechar") } },
+                        containerColor = Panel
+                    )
                 }
                 if (showKey) {
                     AlertDialog(onDismissRequest = { showKey = false }, title = { Text("Credencial da API TMDB") },
