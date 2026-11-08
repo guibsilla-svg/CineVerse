@@ -174,7 +174,8 @@ class MainActivity : ComponentActivity() {
                             readTimeout = 120000
                             requestMethod = "GET"
                             setRequestProperty("User-Agent", "CineVerso-Android")
-                            setRequestProperty("Accept", "application/vnd.android.package-archive, application/octet-stream")
+                            setRequestProperty("Accept", "application/octet-stream")
+                            setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
                             setRequestProperty("Cache-Control", "no-cache")
                         }
                         try {
@@ -247,26 +248,34 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 val release = withContext(Dispatchers.IO) {
                     runCatching {
-                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases/latest").openConnection() as HttpURLConnection).apply {
-                            connectTimeout = 10000
-                            readTimeout = 10000
+                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases?per_page=100").openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 15000
+                            readTimeout = 20000
                             setRequestProperty("Accept", "application/vnd.github+json")
                             setRequestProperty("User-Agent", "CineVerso-Android")
+                            setRequestProperty("Cache-Control", "no-cache")
                         }
                         try {
-                            val v1Release = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-                                .takeIf {
+                            val releases = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+                            val newestRelease = (0 until releases.length())
+                                .mapNotNull { releases.optJSONObject(it) }
+                                .filter {
                                     it.optString("tag_name").removePrefix("v").startsWith("1.0.") &&
                                         !it.optBoolean("draft") && !it.optBoolean("prerelease")
                                 }
-                            val tag = v1Release?.optString("tag_name")?.removePrefix("v").orEmpty()
-                            val assets = v1Release?.optJSONArray("assets")
-                            val apk = assets?.let { array ->
-                                (0 until array.length()).map { array.getJSONObject(it) }
+                                .maxWithOrNull { a, b ->
+                                    compareVersions(
+                                        a.optString("tag_name").removePrefix("v"),
+                                        b.optString("tag_name").removePrefix("v")
+                                    )
+                                }
+                            val tag = newestRelease?.optString("tag_name")?.removePrefix("v").orEmpty()
+                            val apk = newestRelease?.optJSONArray("assets")?.let { assets ->
+                                (0 until assets.length()).map { assets.getJSONObject(it) }
                                     .firstOrNull { it.optString("name") == "cineverse.apk" }
-                                    ?.optString("browser_download_url")
+                                    ?.optString("url")
                             }
-                            if (tag.isNotBlank() && apk?.startsWith("https://") == true &&
+                            if (tag.isNotBlank() && apk?.startsWith("https://api.github.com/") == true &&
                                 compareVersions(tag, BuildConfig.VERSION_NAME) > 0
                             ) tag to apk else null
                         } finally { connection.disconnect() }
