@@ -464,7 +464,15 @@ class MainActivity : ComponentActivity() {
                     editingSeries != null -> editingSeries = null
                     page == "Detalhes" -> returnFromDetails()
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
-                    page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
+                    // A franquia aberta é uma tela interna de Explorar.
+                    // O Back do Android deve fechá-la antes de navegar para fora da seção.
+                    selectedExploreFranchise != null -> {
+                        selectedExploreFranchise = null
+                        if (page != "Explorar") {
+                            pageHistory.removeAll { it == "Explorar" }
+                            page = "Explorar"
+                        }
+                    }
                     page == "Explorar" && exploreCategory == "franchises" -> {
                         exploreCategory = previousExploreCategory
                         selectedExploreFranchise = null
@@ -733,7 +741,9 @@ class MainActivity : ComponentActivity() {
                     dragOrder.mapNotNull { byId[it] } + manualVisible.filter { it.id !in dragOrder }
                 } else manualVisible
             }
-            val posterBounds = remember { mutableStateMapOf<Long, Rect>() }
+            // Bounds são escritos por callbacks de layout na thread principal;
+            // não precisam integrar o Snapshot observável do Compose.
+            val posterBounds = remember { mutableMapOf<Long, Rect>() }
             val latestVisibleIds by rememberUpdatedState(visible.map { it.id }.toSet())
             fun persistManualOrder(orderedIds: List<Long>) {
                 if (sortMode != "Manual" || orderedIds.isEmpty()) return
