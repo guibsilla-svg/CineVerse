@@ -159,40 +159,58 @@ class MainActivity : ComponentActivity() {
 
     private fun downloadAndInstallUpdate(url: String, version: String) {
         runCatching {
-            val fileName = "cineverso-update-$version.apk"
-            val request = DownloadManager.Request(Uri.parse(url))
-                .setTitle("Atualizando CineVerso")
-                .setDescription("Baixando a versão $version")
-                .setMimeType("application/vnd.android.package-archive")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(false)
-                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
             val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-            val downloadId = manager.enqueue(request)
-            Toast.makeText(this, "Baixando atualização $version. Você será avisado quando estiver pronta.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Baixando atualização $version.", Toast.LENGTH_LONG).show()
             lifecycleScope.launch {
-                var finished = false
-                while (!finished) {
-                    val cursor = manager.query(DownloadManager.Query().setFilterById(downloadId))
-                    if (cursor != null) {
-                        if (cursor.moveToFirst()) {
-                            when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
-                                DownloadManager.STATUS_SUCCESSFUL -> {
-                                    val file = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
-                                    installUpdateFile(file)
-                                    finished = true
+                var attempt = 0
+                var installed = false
+                var lastReason = -1
+                while (attempt < 3 && !installed) {
+                    attempt++
+                    val fileName = "cineverso-update-$version-$attempt.apk"
+                    val destination = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+                    destination.delete()
+                    val request = DownloadManager.Request(Uri.parse(url))
+                        .setTitle("Atualizando CineVerso")
+                        .setDescription("Baixando a versão $version (tentativa $attempt de 3)")
+                        .setMimeType("application/vnd.android.package-archive")
+                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        .setAllowedOverMetered(true)
+                        .setAllowedOverRoaming(false)
+                        .setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, fileName)
+                    val downloadId = manager.enqueue(request)
+                    var completed = false
+                    while (!completed) {
+                        val cursor = manager.query(DownloadManager.Query().setFilterById(downloadId))
+                        if (cursor != null) {
+                            if (cursor.moveToFirst()) {
+                                when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                                    DownloadManager.STATUS_SUCCESSFUL -> {
+                                        installUpdateFile(destination)
+                                        installed = true
+                                        completed = true
+                                    }
+                                    DownloadManager.STATUS_FAILED -> {
+                                        lastReason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                                        completed = true
+                                    }
                                 }
-                                DownloadManager.STATUS_FAILED -> {
-                                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                                    Toast.makeText(this@MainActivity, "Falha ao baixar a atualização (código $reason). Tente novamente mais tarde.", Toast.LENGTH_LONG).show()
-                                    finished = true
-                                }
+                            } else {
+                                lastReason = -1
+                                completed = true
                             }
+                            cursor.close()
                         }
-                        cursor.close()
+                        if (!completed) delay(1000)
                     }
-                    if (!finished) delay(1000)
+                    if (!installed && attempt < 3) {
+                        val temporaryHttpFailure = lastReason in 500..599
+                        val transientDownloadFailure = lastReason in 1001..1005
+                        if (temporaryHttpFailure || transientDownloadFailure) delay(2000L * attempt) else break
+                    }
+                }
+                if (!installed) {
+                    Toast.makeText(this@MainActivity, "Não foi possível baixar a atualização (código $lastReason). Tente novamente mais tarde.", Toast.LENGTH_LONG).show()
                 }
             }
         }.onFailure {
