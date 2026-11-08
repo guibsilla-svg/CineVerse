@@ -464,7 +464,16 @@ class MainActivity : ComponentActivity() {
                     editingSeries != null -> editingSeries = null
                     page == "Detalhes" -> returnFromDetails()
                     page == "Minha lista" && filter == "Franquias" -> filter = lastNormalListFilter
-                    page == "Explorar" && exploreCategory == "franchises" && selectedExploreFranchise != null -> selectedExploreFranchise = null
+                    // The selected franchise is a nested screen inside Explore.
+                    // Handle it independently of the current category/page snapshot so
+                    // Android Back always returns to the franchise catalog first.
+                    selectedExploreFranchise != null -> {
+                        selectedExploreFranchise = null
+                        if (page != "Explorar") {
+                            pageHistory.removeAll { it == "Explorar" }
+                            page = "Explorar"
+                        }
+                    }
                     page == "Explorar" && exploreCategory == "franchises" -> {
                         exploreCategory = previousExploreCategory
                         selectedExploreFranchise = null
