@@ -39,7 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
         private val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS games (rawgId INTEGER NOT NULL, name TEXT NOT NULL, released TEXT NOT NULL DEFAULT '', year TEXT NOT NULL DEFAULT '', backgroundImage TEXT NOT NULL DEFAULT '', overview TEXT NOT NULL DEFAULT '', rating REAL NOT NULL DEFAULT 0.0, metacritic INTEGER NOT NULL DEFAULT 0, genres TEXT NOT NULL DEFAULT '', platforms TEXT NOT NULL DEFAULT '', addedAt INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'WANT_TO_PLAY', PRIMARY KEY(rawgId))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS games (rawgId INTEGER NOT NULL, name TEXT NOT NULL, released TEXT NOT NULL, year TEXT NOT NULL, backgroundImage TEXT NOT NULL, overview TEXT NOT NULL, rating REAL NOT NULL, metacritic INTEGER NOT NULL, genres TEXT NOT NULL, platforms TEXT NOT NULL, addedAt INTEGER NOT NULL, status TEXT NOT NULL, PRIMARY KEY(rawgId))")
             }
         }
         @Volatile private var INSTANCE: AppDatabase? = null
