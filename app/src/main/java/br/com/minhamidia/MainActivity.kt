@@ -295,6 +295,8 @@ class MainActivity : ComponentActivity() {
             var rawgKey by remember { mutableStateOf(prefs.getString("rawg_key", "") ?: "") }
             var gamesQuery by remember { mutableStateOf("") }
             var gamesCategory by remember { mutableStateOf("Em alta") }
+            var gamesPlatform by remember { mutableStateOf("Todos") }
+            var gamesGenre by remember { mutableStateOf("Todos") }
             var gamesSection by remember { mutableStateOf("Descobrir") }
             var gamesRemote by remember { mutableStateOf(emptyList<br.com.minhamidia.data.RawgGame>()) }
             var gamesLoading by remember { mutableStateOf(false) }
@@ -889,12 +891,27 @@ class MainActivity : ComponentActivity() {
                                                 FilterChip(selected = gamesCategory == category, onClick = { gamesCategory = category }, label = { Text(category, fontSize = 10.sp) })
                                             }
                                         }
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            listOf("Todos", "PS5", "PS4").forEach { platform ->
+                                                FilterChip(selected = gamesPlatform == platform, onClick = { gamesPlatform = platform }, label = { Text(platform, fontSize = 10.sp) })
+                                            }
+                                        }
+                                        val availableGameGenres = gamesRemote.flatMap { it.genres.split(", ") }.filter { it.isNotBlank() }.distinct().take(12)
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            (listOf("Todos") + availableGameGenres).forEach { genre ->
+                                                FilterChip(selected = gamesGenre == genre, onClick = { gamesGenre = genre }, label = { Text(genre, fontSize = 10.sp) })
+                                            }
+                                        }
+                                        val visibleGames = gamesRemote.filter { game ->
+                                            (gamesPlatform == "Todos" || game.platforms.contains("PlayStation $gamesPlatform", ignoreCase = true)) &&
+                                                (gamesGenre == "Todos" || game.genres.split(", ").contains(gamesGenre))
+                                        }
                                         Text("JOGOS PARA PS5", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                                         Text("PS5 e títulos de PS4 compatíveis com PS5", color = Muted, fontSize = 11.sp)
                                         if (gamesLoading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Purple)
                                         if (gamesError.isNotBlank()) Text(gamesError, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
                                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                                            items(gamesRemote, key = { it.id }) { game ->
+                                            items(visibleGames, key = { it.id }) { game ->
                                                 val saved = savedGames.any { it.rawgId == game.id }
                                                 Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).clickable {
                                                     selectedGame = game.toEntity()
@@ -912,7 +929,7 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 }
                                             }
-                                            if (!gamesLoading && gamesRemote.isEmpty() && gamesError.isBlank()) item { Text("Nenhum jogo encontrado com essa busca.", color = Muted, fontSize = 12.sp) }
+                                            if (!gamesLoading && visibleGames.isEmpty() && gamesError.isBlank()) item { Text("Nenhum jogo encontrado com esses filtros.", color = Muted, fontSize = 12.sp) }
                                         }
                                     } else {
                                         Text("SUA LISTA DE JOGOS", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
