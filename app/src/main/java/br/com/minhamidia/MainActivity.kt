@@ -228,6 +228,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         val prefs = getSharedPreferences("cineverse_settings", MODE_PRIVATE)
+        prefs.edit().remove("rawg_key").apply()
         val pendingPath = prefs.getString("pending_update_apk", null) ?: return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
             prefs.edit().remove("pending_update_apk").apply()
