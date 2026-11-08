@@ -260,7 +260,7 @@ class MainActivity : ComponentActivity() {
             var apiKey by remember { mutableStateOf(prefs.getString("tmdb_key", "")?.takeIf { it.isNotBlank() } ?: BuildConfig.TMDB_API_KEY) }
             var query by remember { mutableStateOf("") }
             var page by remember { mutableStateOf("Início") }
-            var detailReturnPage by remember { mutableStateOf("Buscar") }
+            var detailReturnPage by remember { mutableStateOf("Explorar") }
             val pageHistory = remember { mutableStateListOf<String>() }
             fun navigateTo(destination: String) {
                 if (destination != page) {
@@ -299,6 +299,16 @@ class MainActivity : ComponentActivity() {
             var personalRatingInput by remember { mutableIntStateOf(0) }
             var franchiseCollections by remember { mutableStateOf(emptyList<br.com.minhamidia.data.TmdbFranchise>()) }
             var myListFranchiseCollections by remember { mutableStateOf(emptyList<TmdbFranchise>()) }
+            var franchiseView by remember { mutableStateOf("Em andamento") }
+            var ignoredFranchiseIds by remember {
+                mutableStateOf(prefs.getStringSet("ignored_franchise_ids", emptySet())?.toSet() ?: emptySet())
+            }
+            fun setFranchiseIgnored(id: Int, ignored: Boolean) {
+                val key = id.toString()
+                val updated = if (ignored) ignoredFranchiseIds + key else ignoredFranchiseIds - key
+                ignoredFranchiseIds = updated
+                prefs.edit().putStringSet("ignored_franchise_ids", updated).apply()
+            }
             var lastNormalListFilter by remember { mutableStateOf("Quero assistir") }
             var recommendedMovies by remember { mutableStateOf(emptyList<TmdbResult>()) }
             var recommendedShows by remember { mutableStateOf(emptyList<TmdbResult>()) }
@@ -1311,21 +1321,72 @@ class MainActivity : ComponentActivity() {
                                         .filter { it.mediaType == "movie" && it.franchiseId != null && it.franchiseId!! > 0 }
                                         .groupBy { it.franchiseId!! }
                                         .toList()
-                                        .sortedBy { entry -> entry.second.firstOrNull()?.franchiseName?.lowercase() ?: "" }
+                                    val today = java.time.LocalDate.now().toString()
+                                    val franchiseRows = franchiseGroups.mapNotNull { group ->
+                                        val savedMovies = group.second.sortedWith(
+                                            compareBy<MediaItem> { it.year.toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it.title }
+                                        )
+                                        val franchiseData = myListFranchiseCollections.firstOrNull { it.id == group.first }
+                                        val allParts = franchiseData?.parts ?: savedMovies.map { media ->
+                                            TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage)
+                                        }
+                                        val releasedParts = allParts.filter { part ->
+                                            val releaseDate = part.releaseDate.ifBlank {
+                                                part.year.takeIf { it.length >= 4 }?.let { "$it-12-31" }.orEmpty()
+                                            }
+                                            releaseDate.isBlank() || releaseDate <= today
+                                        }.distinctBy { it.id }
+                                        if (releasedParts.isEmpty()) null else {
+                                            val completed = releasedParts.all { part ->
+                                                all.firstOrNull { it.tmdbId == part.id && it.mediaType == "movie" }?.status == "WATCHED"
+                                            }
+                                            Triple(group, releasedParts, completed)
+                                        }
+                                    }.sortedBy { row ->
+                                        row.first.second.firstOrNull()?.franchiseName?.lowercase().orEmpty()
+                                    }
+                                    val visibleRows = franchiseRows.filter { row ->
+                                        val ignored = ignoredFranchiseIds.contains(row.first.first.toString())
+                                        when (franchiseView) {
+                                            "Concluídas" -> row.third && !ignored
+                                            "Ignoradas" -> ignored
+                                            else -> !row.third && !ignored
+                                        }
+                                    }
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                         TextButton(onClick = { filter = lastNormalListFilter }) { Text("← Voltar para minha lista", color = Purple) }
                                     }
                                     Text("FRANQUIAS DA MINHA LISTA", color = Purple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 3.dp)
+                                    ) {
+                                        items(listOf("Em andamento", "Concluídas", "Ignoradas")) { option ->
+                                            FilterChip(
+                                                selected = franchiseView == option,
+                                                onClick = { franchiseView = option },
+                                                label = { Text(option, fontSize = 10.sp) }
+                                            )
+                                        }
+                                    }
                                     Text(
-                                        "${franchiseGroups.size} franquias • veja também os filmes que faltam na sua coleção",
+                                        when (franchiseView) {
+                                            "Concluídas" -> "Franquias com todos os filmes lançados já assistidos."
+                                            "Ignoradas" -> "Franquias ocultadas por você. É possível reativá-las."
+                                            else -> "Somente filmes já lançados; próximos lançamentos entram automaticamente na estreia."
+                                        },
                                         color = Muted,
-                                        fontSize = 11.sp
+                                        fontSize = 10.sp
                                     )
-                                    if (franchiseGroups.isEmpty()) {
+                                    if (visibleRows.isEmpty()) {
                                         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                             Text(
-                                                if (apiKey.isBlank()) "Configure o TMDB para identificar as franquias."
-                                                else "Ainda não identificamos franquias nos filmes da sua lista. A identificação é feita automaticamente pelo TMDB.",
+                                                when {
+                                                    apiKey.isBlank() -> "Configure o TMDB para identificar as franquias."
+                                                    franchiseView == "Concluídas" -> "Nenhuma franquia concluída ainda."
+                                                    franchiseView == "Ignoradas" -> "Você não tem franquias ignoradas."
+                                                    else -> "Não há franquias em andamento. As concluídas ficam na aba Concluídas."
+                                                },
                                                 color = Muted,
                                                 fontSize = 12.sp
                                             )
@@ -1337,46 +1398,72 @@ class MainActivity : ComponentActivity() {
                                             verticalArrangement = Arrangement.spacedBy(12.dp),
                                             contentPadding = PaddingValues(vertical = 12.dp)
                                         ) {
-                                            items(franchiseGroups, key = { it.first }) { group ->
-                                                val franchiseMovies = group.second.sortedWith(
-                                                    compareBy<MediaItem> { it.year.toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it.title }
-                                                )
+                                            items(visibleRows, key = { it.first.first }) { row ->
+                                                val group = row.first
+                                                val franchiseParts = row.second
+                                                val completed = row.third
+                                                val franchiseMovies = group.second
+                                                val franchiseData = myListFranchiseCollections.firstOrNull { it.id == group.first }
+                                                val ignored = ignoredFranchiseIds.contains(group.first.toString())
                                                 Column(
                                                     Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(12.dp),
                                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            franchiseData?.name?.takeIf { it.isNotBlank() }
+                                                                ?: franchiseMovies.firstOrNull()?.franchiseName?.takeIf { it.isNotBlank() }
+                                                                ?: "Franquia",
+                                                            color = TextMain,
+                                                            fontSize = 16.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+                                                        TextButton(
+                                                            onClick = { setFranchiseIgnored(group.first, !ignored) },
+                                                            contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)
+                                                        ) {
+                                                            Text(if (ignored) "Reativar" else "Ignorar", color = Purple, fontSize = 10.sp)
+                                                        }
+                                                    }
                                                     Text(
-                                                        franchiseMovies.firstOrNull()?.franchiseName?.takeIf { it.isNotBlank() } ?: "Franquia",
-                                                        color = TextMain,
-                                                        fontSize = 16.sp,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        "${franchiseMovies.size} ${if (franchiseMovies.size == 1) "filme" else "filmes"} na sua lista • ordem de lançamento",
+                                                        "\${franchiseParts.size} filmes lançados • ordem de lançamento",
                                                         color = Purple,
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold
                                                     )
-                                                    val franchiseData = myListFranchiseCollections.firstOrNull { it.id == group.first }
-                                                    val franchiseParts = franchiseData?.parts ?: franchiseMovies.map { media ->
-                                                        TmdbResult(media.tmdbId ?: 0, media.title, media.mediaType, media.year, media.posterPath, media.overview, media.releaseDate, media.tmdbVoteAverage)
-                                                    }
                                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                                         items(franchiseParts, key = { it.id }) { part ->
                                                             val saved = all.firstOrNull { it.tmdbId == part.id && it.mediaType == "movie" }
                                                             Column(Modifier.width(104.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                                Box(Modifier.fillMaxWidth().clickable {
-                                                                    detailItem = part
-                                                                    detailReturnPage = "Minha lista"
-                                                                    detailSeasons = saved?.seasonProgress?.ifBlank { "[]" } ?: "[]"
-                                                                    navigateTo("Detalhes")
-                                                                }) {
+                                                                Box(
+                                                                    Modifier.fillMaxWidth().height(148.dp)
+                                                                        .background(if (completed) Color(0xFF302044) else Night, RoundedCornerShape(8.dp))
+                                                                        .clickable {
+                                                                            detailItem = part
+                                                                            detailReturnPage = "Minha lista"
+                                                                            detailSeasons = saved?.seasonProgress?.ifBlank { "[]" } ?: "[]"
+                                                                            navigateTo("Detalhes")
+                                                                        },
+                                                                    contentAlignment = Alignment.TopEnd
+                                                                ) {
                                                                     AsyncImage(
                                                                         model = part.posterPath?.let { "https://image.tmdb.org/t/p/w342$it" },
                                                                         contentDescription = part.title,
-                                                                        modifier = Modifier.fillMaxWidth().height(148.dp).background(Night, RoundedCornerShape(8.dp)),
+                                                                        modifier = Modifier.fillMaxSize().background(if (completed) Color(0xFF302044) else Night, RoundedCornerShape(8.dp)),
                                                                         contentScale = ContentScale.Crop
                                                                     )
+                                                                    if (completed) {
+                                                                        Text(
+                                                                            "CONCLUÍDO",
+                                                                            color = Color.White,
+                                                                            fontSize = 7.sp,
+                                                                            fontWeight = FontWeight.ExtraBold,
+                                                                            modifier = Modifier.padding(4.dp)
+                                                                                .background(Color(0xFF713BA5), RoundedCornerShape(5.dp))
+                                                                                .padding(horizontal = 5.dp, vertical = 3.dp)
+                                                                        )
+                                                                    }
                                                                 }
                                                                 Text(part.title, color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 2)
                                                                 Text(part.year.ifBlank { "Ano indisponível" }, color = Muted, fontSize = 9.sp)
@@ -1399,11 +1486,17 @@ class MainActivity : ComponentActivity() {
                                                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                                                                     ) { Text("+ Adicionar", fontSize = 9.sp, maxLines = 1) }
                                                                 } else {
-                                                                    Text(when (saved.status) {
-                                                                        "WATCHED" -> "JÁ ASSISTI"
-                                                                        "WATCHING" -> "TÔ ASSISTINDO"
-                                                                        else -> "QUERO ASSISTIR"
-                                                                    }, color = Purple, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                                                                    Text(
+                                                                        when (saved.status) {
+                                                                            "WATCHED" -> "JÁ ASSISTI"
+                                                                            "WATCHING" -> "TÔ ASSISTINDO"
+                                                                            else -> "QUERO ASSISTIR"
+                                                                        },
+                                                                        color = if (completed) Color(0xFFD8B5FF) else Purple,
+                                                                        fontSize = 8.sp,
+                                                                        fontWeight = FontWeight.ExtraBold,
+                                                                        maxLines = 1
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -1412,7 +1505,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
-                                } else {
+                                }
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                                     items(listOf("Quero assistir", "Tô assistindo", "Já assisti", "Franquias")) { statusOption ->
                                         FilterChip(
@@ -1895,7 +1988,7 @@ class MainActivity : ComponentActivity() {
                             tonalElevation = 0.dp
                         ) {
                             var moreMenu by remember { mutableStateOf(false) }
-                            listOf("Início", "Explorar", "Buscar", "Minha lista").forEach { destination ->
+                            listOf("Início", "Explorar", "Minha lista").forEach { destination ->
                                 NavigationBarItem(
                                     selected = page == destination,
                                     onClick = { navigateTo(destination) },
@@ -1904,7 +1997,6 @@ class MainActivity : ComponentActivity() {
                                             when (destination) {
                                                 "Início" -> "⌂"
                                                 "Explorar" -> "✦"
-                                                "Buscar" -> "⌕"
                                                 else -> "▣"
                                             },
                                             fontSize = 20.sp,
