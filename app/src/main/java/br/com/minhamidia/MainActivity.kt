@@ -906,7 +906,7 @@ class MainActivity : ComponentActivity() {
                                             (gamesPlatform == "Todos" || game.platforms.contains("PlayStation $gamesPlatform", ignoreCase = true)) &&
                                                 (gamesGenre == "Todos" || game.genres.split(", ").contains(gamesGenre))
                                         }
-                                        Text("JOGOS PARA PS5", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                        Text("JOGOS COMPATÍVEIS COM PS5", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                                         Text("PS5 e títulos de PS4 compatíveis com PS5", color = Muted, fontSize = 11.sp)
                                         if (gamesLoading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Purple)
                                         if (gamesError.isNotBlank()) Text(gamesError, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
