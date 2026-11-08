@@ -1337,7 +1337,7 @@ class MainActivity : ComponentActivity() {
                                             releaseDate.isBlank() || releaseDate <= today
                                         }.distinctBy { it.id }
                                         if (releasedParts.isEmpty()) null else {
-                                            val completed = releasedParts.all { part ->
+                                            val completed = franchiseData != null && releasedParts.all { part ->
                                                 all.firstOrNull { it.tmdbId == part.id && it.mediaType == "movie" }?.status == "WATCHED"
                                             }
                                             Triple(group, releasedParts, completed)
