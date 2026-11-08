@@ -158,63 +158,69 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun downloadAndInstallUpdate(url: String, version: String) {
-        runCatching {
-            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-            Toast.makeText(this, "Baixando atualização $version.", Toast.LENGTH_LONG).show()
-            lifecycleScope.launch {
-                var attempt = 0
-                var installed = false
-                var lastReason = -1
-                while (attempt < 3 && !installed) {
-                    attempt++
-                    val fileName = "cineverso-update-$version-$attempt.apk"
-                    val destination = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
-                    destination.delete()
-                    val request = DownloadManager.Request(Uri.parse(url))
-                        .setTitle("Atualizando CineVerso")
-                        .setDescription("Baixando a versão $version (tentativa $attempt de 3)")
-                        .setMimeType("application/vnd.android.package-archive")
-                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                        .setAllowedOverMetered(true)
-                        .setAllowedOverRoaming(false)
-                        .setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, fileName)
-                    val downloadId = manager.enqueue(request)
-                    var completed = false
-                    while (!completed) {
-                        val cursor = manager.query(DownloadManager.Query().setFilterById(downloadId))
-                        if (cursor != null) {
-                            if (cursor.moveToFirst()) {
-                                when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
-                                    DownloadManager.STATUS_SUCCESSFUL -> {
-                                        installUpdateFile(destination)
-                                        installed = true
-                                        completed = true
-                                    }
-                                    DownloadManager.STATUS_FAILED -> {
-                                        lastReason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                                        completed = true
-                                    }
-                                }
-                            } else {
-                                lastReason = -1
-                                completed = true
-                            }
-                            cursor.close()
+        Toast.makeText(this, "Baixando atualização $version.", Toast.LENGTH_LONG).show()
+        lifecycleScope.launch {
+            var installed = false
+            var lastError = "falha de conexão"
+            for (attempt in 1..3) {
+                val destination = File(cacheDir, "updates/cineverso-update-$version.apk")
+                destination.parentFile?.mkdirs()
+                destination.delete()
+                try {
+                    withContext(Dispatchers.IO) {
+                        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                            instanceFollowRedirects = true
+                            connectTimeout = 20000
+                            readTimeout = 120000
+                            requestMethod = "GET"
+                            setRequestProperty("User-Agent", "CineVerso-Android")
+                            setRequestProperty("Accept", "application/vnd.android.package-archive, application/octet-stream")
+                            setRequestProperty("Cache-Control", "no-cache")
                         }
-                        if (!completed) delay(1000)
+                        try {
+                            val responseCode = connection.responseCode
+                            if (responseCode != HttpURLConnection.HTTP_OK) {
+                                throw java.io.IOException("HTTP $responseCode")
+                            }
+                            connection.inputStream.use { input ->
+                                destination.outputStream().buffered().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            if (destination.length() < 1024L * 1024L) {
+                                throw java.io.IOException("arquivo incompleto (${destination.length()} bytes)")
+                            }
+                            val signature = destination.inputStream().use { input ->
+                                ByteArray(4).also { input.read(it) }
+                            }
+                            if (signature[0] != 0x50.toByte() || signature[1] != 0x4B.toByte()) {
+                                throw java.io.IOException("resposta recebida não é um APK válido")
+                            }
+                        } finally {
+                            connection.disconnect()
+                        }
                     }
-                    if (!installed && attempt < 3) {
-                        val temporaryHttpFailure = lastReason in 500..599
-                        val transientDownloadFailure = lastReason in 1001..1005
-                        if (temporaryHttpFailure || transientDownloadFailure) delay(2000L * attempt) else break
+                    installUpdateFile(destination)
+                    installed = true
+                    break
+                } catch (error: Exception) {
+                    lastError = error.message ?: error.javaClass.simpleName
+                    destination.delete()
+                    val isServerError = lastError.contains("HTTP 5")
+                    if (attempt < 3 && (isServerError || error is java.io.IOException)) {
+                        delay(1500L * attempt)
+                    } else {
+                        break
                     }
-                }
-                if (!installed) {
-                    Toast.makeText(this@MainActivity, "Não foi possível baixar a atualização (código $lastReason). Tente novamente mais tarde.", Toast.LENGTH_LONG).show()
                 }
             }
-        }.onFailure {
-            Toast.makeText(this, "Não foi possível iniciar o download da atualização.", Toast.LENGTH_LONG).show()
+            if (!installed) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Não foi possível baixar a atualização após 3 tentativas: $lastError",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
@@ -241,17 +247,15 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 val release = withContext(Dispatchers.IO) {
                     runCatching {
-                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases?per_page=100").openConnection() as HttpURLConnection).apply {
+                        val connection = (URL("https://api.github.com/repos/guibsilla-svg/CineVerse/releases/latest").openConnection() as HttpURLConnection).apply {
                             connectTimeout = 10000
                             readTimeout = 10000
                             setRequestProperty("Accept", "application/vnd.github+json")
                             setRequestProperty("User-Agent", "CineVerso-Android")
                         }
                         try {
-                            val releases = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
-                            val v1Release = (0 until releases.length())
-                                .map { releases.getJSONObject(it) }
-                                .firstOrNull {
+                            val v1Release = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                                .takeIf {
                                     it.optString("tag_name").removePrefix("v").startsWith("1.0.") &&
                                         !it.optBoolean("draft") && !it.optBoolean("prerelease")
                                 }
